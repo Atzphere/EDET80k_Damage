@@ -21,10 +21,12 @@ DSIZE_TINY = 2
 data_references = {"huge": DSIZE_HUGE, "large": DSIZE_LARGE,
                    "medium": DSIZE_MEDIUM, "small": DSIZE_SMALL, "tiny": DSIZE_TINY}
 
-data = pd.read_csv(DPATH, header=0)
+data = pd.read_csv(DPATH, header=0, skip_blank_lines=True).dropna(how='all')
 
+print(data)
 
 def get_size(text):
+    print(text)
     for word in text.split():
         if word in data_references.keys():
             return data_references[word]**2
