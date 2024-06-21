@@ -5,6 +5,10 @@ from scipy.optimize import curve_fit
 import numpy as np
 import seaborn as sns
 from temperaturemap import temperature_Al
+import os
+
+os.chdir("C:\\Users\\ssuub\\Desktop\\Damage analysis\\EDET80k_Damage\\Lasing Analysis\\apps")
+print(os.getcwd())
 
 sns.set_theme()
 
@@ -13,7 +17,7 @@ def fitfun(x, mu, var, a, b):
     return a * np.exp(-((x - mu)**2 / (2 * var))) + b
 
 
-DSTRING = "./test.dat"
+DSTRING = "../data/test.dat"
 data = oc.OptrisDataset(DSTRING)
 profile = data.writeabledata['Temperature profile 1']
 darray = data.build_array_data()
@@ -60,7 +64,7 @@ for time in t:
             print(
                 f"keeping fit with uncertainties: {np.sqrt(np.diag(ncov))} @ {time}")
             plt.plot(x_smooth, fitfun(x_smooth, *params), c=c)
-            ax.scatter(x, ydata, label=time, c=c)
+            ax.scatter(x, ydata, label=time, color=c)
             mu_delta, var_delta, a_delta, b_delta = fit_uncertainties
             mu, var, a, b = params
             sigma_mu.append(mu_delta)  # record data for data

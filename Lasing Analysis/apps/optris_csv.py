@@ -79,7 +79,7 @@ class OptrisDataset(DictDataset):
         self.filepath = filepath
         self.times = []
         self.profiles = []
-        with open(filepath) as f:
+        with open(filepath, encoding="ISO-8859-1") as f:
             reader = csv.reader(f)
 
             for i in range(6):  # blow past useless header data
