@@ -142,13 +142,13 @@ async def send_commands(w, msgs, delay=0.04, eol_character=DEFAULT_EOL_CHAR, opt
     logging.debug('Done sending')
 
 
-async def read(r, expected_msgs=1, readline_eol_character=DEFAULT_EOL_CHAR, tolerant=False, optris_workaround=True, timeout=0.1):
+async def read(r, expected_msgs=1, readline_eol_character=DEFAULT_EOL_CHAR, tolerant=False, optris_workaround=True, timeout=0.4):
     messages = []
     logging.debug(f"Expecting {expected_msgs} messages.")
     for i in range(expected_msgs):
         try:
             if i == 2 and optris_workaround:
-                msg = await asyncio.wait_for(r.readuntil(readline_eol_character), timeout=0.01)
+                msg = await asyncio.wait_for(r.readuntil(readline_eol_character), timeout=timeout)
             else:
                 msg = await asyncio.wait_for(r.readuntil(readline_eol_character), timeout=timeout)
             logging.debug(f'received: {msg}')

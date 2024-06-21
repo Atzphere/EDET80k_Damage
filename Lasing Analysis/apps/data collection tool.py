@@ -6,8 +6,9 @@ import optris_csv as ocsv
 import numpy as np
 import pickle
 import temperaturemap
+import matplotlib.pyplot as plt
 
-os.chdir(r"C:\Users\allen\Code (Local)\EDET80k_Damage\Lasing Analysis\apps")
+os.chdir(r"C:\Users\ssuub\Desktop\Damage analysis\EDET80k_Damage\Lasing Analysis\apps")
 # gets hotspot location from optris and reports to user. gives instructions to user.
 # takes file, unpacks profile, lets user specify time range region of interest and standardized start time (begin lasing event)
 # cuts file down and saves dataset as a pickle
@@ -15,13 +16,14 @@ os.chdir(r"C:\Users\allen\Code (Local)\EDET80k_Damage\Lasing Analysis\apps")
 done = False
 optris_connection = cs.COMInterface("COM4")
 
-DPATH = "../data/1S Current evolution tests/"
-OUTPUT_PATH = "../data/"
+DPATH = "../data/3A Time evolution tests/"
+OUTPUT_PATH = "processed/"
 
 class TempProfileDataset:
     '''A 2d dataset containing T vs x vs time values'''
 
-    def __init__(self, dset, key, start, stop, num, precull=None, internal=False):
+    def __init__(self, dset, key, start, stop, num, precull=None, internal=False, metadata={}):
+        self.metadata=metadata
         if not internal:
             dset_dict = dset.array_data
             if precull is not None:
@@ -38,13 +40,12 @@ class TempProfileDataset:
             raise ValueError("Added arrays must have matching timestamps.")
         new_data = np.concatenate((self.data, val2.data), axis=1)
         new_x = np.concatenate((self.xvals, val2.xvals))
-        print(self.xvals,"e", val2.xvals)
         sorted_indices = np.argsort(new_x)
         new_x = new_x[sorted_indices]
         new_data = new_data[:, sorted_indices]
         to_return = TempProfileDataset(
             None, None, None, None, None, internal=True)
-        to_return.time = time
+        to_return.time = self.time
         to_return.data = new_data
         to_return.xvals = new_x
         return to_return
@@ -66,10 +67,13 @@ class TempProfileDataset:
 
     def save(self, file):
         '''saves a dictionary of the time, x, temperature dsets as a pickle'''
-        data = {'time': self.time, 'x': self.xvals, 'temp': self.data}
+        data = {'time': self.time, 'x': self.xvals, 'temp': self.data, 'start' : self.start_time}
+        data.update(self.metadata)
         with open(file, 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    def add_metadata(self, mdata):
+        self.metadata.update(mdata)
 
 def block_until_ready(prompt):
     ready = False
@@ -109,7 +113,7 @@ def process_file(f):
         params = get_profile_params(profile_key)
         profiles.append(TempProfileDataset(dset, profile_key, **params))
     processed = sum(profiles)
-    processed.data = temperaturemap.maps['Al'](processed.data)
+    processed.data = temperaturemap.maps['Al'].true_temperature(processed.data)
     return processed
 
 def get_values(prompts):
@@ -147,16 +151,24 @@ while not done:
     plt.show(block=False)
     tstart = None
     while not satisfied:
-        if input("Would you like to cull this dataset by time? (y/n)") == 'y':
-            satisfied = True
-        tstart, tstop = get_values(["Choose a start time.", "Choose a stop time."])
+        if input("Would you like to cull this dataset by time? (y/n)") == 'n':
+            break
+        else:
+            tstart, tstop = get_values(["Choose a start time.", "Choose a stop time."])
 
         fig, ax = plt.subplots()
-        ax.plot(overall_profile.slice_by_time(tstart, tstop))
+        ax.plot(*overall_profile.slice_by_time(tstart, tstop))
         ax.set_title("Temperature vs time preview")
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Converted temperature (C)")
         plt.show(block=False)
-    if input("Would you like to keep this cull? (y/n)") == 'y':
-        overall_profile.slice_by_time(tstart, tstop, preview=False)
-        satisfied = True
+        if input("Would you like to keep this cull? (y/n)") == 'y':
+            overall_profile.slice_by_time(tstart, tstop, preview=False)
+            satisfied = True
+    overall_profile.start_time = float(input("To the best of your ability, specify the start time of the pulse."))
+    overall_profile.add_metadata({"current" : float(input("What was the current of the pulse?"))})
+    overall_profile.add_metadata({"duration" : float(input("What was the duration of the pulse?"))})
+    if not os.path.exists(DPATH + OUTPUT_PATH):
+        os.makedirs(DPATH + OUTPUT_PATH)
+    overall_profile.save(DPATH + OUTPUT_PATH + f"{overall_profile.metadata['current']}A {overall_profile.metadata['duration']}S.pickle")
+    print("saved data.\n")
