@@ -33,6 +33,7 @@ F = data.slice_by_time('Temperature profile 1', start, stop)
 # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 # surf = ax.plot_surface(X, T, F)
 fig, ax = plt.subplots()
+fig2, ax2 = plt.subplots()
 
 sigma_mu = []
 sigma_var = []
@@ -63,8 +64,9 @@ for time in t:
             c = next(color)  # r a i n b o w
             print(
                 f"keeping fit with uncertainties: {np.sqrt(np.diag(ncov))} @ {time}")
-            plt.plot(x_smooth, fitfun(x_smooth, *params), c=c)
-            ax.scatter(x, ydata, label=time, color=c)
+            ax.plot(x_smooth, fitfun(x_smooth, *params), c=c)
+            ax.scatter(x, ydata, label=time, c=c)
+            ax2.errorbar(x, ydata - fitfun(x, *params), yerr=0.5, label=time, c=c)
             mu_delta, var_delta, a_delta, b_delta = fit_uncertainties
             mu, var, a, b = params
             sigma_mu.append(mu_delta)  # record data for data
@@ -87,7 +89,14 @@ ax.legend()
 ax.set_xlabel("x (arbitrary)")
 ax.set_ylabel("T (C)")
 ax.set_title("Temperature profile for 3.0A 1S laser pulse")
-plt.show()
+
+ax2.legend(loc=1)
+ax2.set_xlabel("x (arbitrary)")
+ax2.set_ylabel("Temperature")
+ax2.set_title("Residuals")
+
+fig.show()
+fig2.show()
 
 fig, ax = plt.subplots()
 
