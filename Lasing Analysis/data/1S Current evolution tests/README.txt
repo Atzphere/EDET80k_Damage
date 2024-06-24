@@ -1,1 +1,0 @@
-The 3A data is actually from a preheat cycle I forgot about, subtract 0.02A from everything to get the actual laser current
