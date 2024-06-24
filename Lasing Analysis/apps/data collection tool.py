@@ -16,7 +16,7 @@ os.chdir(r"C:\Users\ssuub\Desktop\Damage analysis\EDET80k_Damage\Lasing Analysis
 done = False
 optris_connection = cs.COMInterface("COM4")
 
-DPATH = "../data/3A Time evolution tests/"
+DPATH = "../data/1S Current evolution tests/"
 OUTPUT_PATH = "processed/"
 
 class TempProfileDataset:
