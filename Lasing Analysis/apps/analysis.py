@@ -14,6 +14,7 @@ sns.set_theme()
 
 
 def fitfun(x, mu, var, a, b):
+    # gaussian fit function to profile beams with
     return a * np.exp(-((x - mu)**2 / (2 * var))) + b
 
 
