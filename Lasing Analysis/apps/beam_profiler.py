@@ -8,11 +8,13 @@ def gaussian_fitfun(x, mu, var, a, b):
     return a * np.exp(-((x - mu)**2 / (2 * var))) + b
 
 
-def profile_beam(time, x, data, p0=(0, 0, 0, 0), error_tolerance=(np.inf, np.inf, np.inf, np.inf)):
+def profile_beam(time, x, data, p0=(0, 0, 0, 0), sigma=None, error_tolerance=(np.inf, np.inf, np.inf, np.inf), **kwargs):
     '''
     Takes temperature vs x vs time data and attempts to fit it to a Gaussian
     beam. Returns the fitted parameters as a function of time, as well as whether
     a fit at time t either succeeds or fails/exceeds error tolerances.
+
+    Can also pass parameters to curve_fit through kwargs.
 
     params
 
@@ -37,9 +39,12 @@ def profile_beam(time, x, data, p0=(0, 0, 0, 0), error_tolerance=(np.inf, np.inf
     # accumulates fit pass/fail results over time.
     validity = np.zeros(len(time))
 
+    if sigma is None:
+        sigma = np.ones(np.shape(data))
+
     for index, time in enumerate(time):
         try:
-            popt, pcov = curve_fit(gaussian_fitfun, x, data[index], p0=p0)
+            popt, pcov = curve_fit(gaussian_fitfun, x, data[index], p0=p0, sigma=sigma[index], **kwargs)
             var = np.diag(pcov)
             params[index, :] = popt
             variance[index, :] = var

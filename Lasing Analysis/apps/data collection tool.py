@@ -19,6 +19,7 @@ optris_connection = cs.COMInterface("COM4")
 DPATH = "../data/1S Current evolution tests/"
 OUTPUT_PATH = "processed/"
 
+
 class TempProfileDataset:
     '''A 2d dataset containing T vs x vs time values'''
 
@@ -34,6 +35,7 @@ class TempProfileDataset:
             self.time = dset.slice_by_time("time", tstart, tstop)
             self.data = dset.slice_by_time(key, tstart, tstop)
             self.xvals = np.linspace(start, stop, num)
+            self.dsigma = 0
 
     def __add__(self, val2):
         if np.any(self.time != val2.time):
@@ -67,7 +69,7 @@ class TempProfileDataset:
 
     def save(self, file):
         '''saves a dictionary of the time, x, temperature dsets as a pickle'''
-        data = {'time': self.time, 'x': self.xvals, 'temp': self.data, 'start' : self.start_time}
+        data = {'time': self.time, 'x': self.xvals, 'temp': self.data, 'start' : self.start_time, 'temp_sigma': self.dsigma}
         data.update(self.metadata)
         with open(file, 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -113,7 +115,7 @@ def process_file(f):
         params = get_profile_params(profile_key)
         profiles.append(TempProfileDataset(dset, profile_key, **params))
     processed = sum(profiles)
-    processed.data = temperaturemap.maps['Al'].true_temperature(processed.data)
+    processed.data, processed.dsigma = temperaturemap.maps['Al'].true_temperature(processed.data, auto_uncertainty=True)
     return processed
 
 def get_values(prompts):
