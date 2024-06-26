@@ -168,3 +168,5 @@ cython_debug/
 #.idea/
 Lasing Analysis/apps/test.py
 Lasing Analysis/data collector.bat
+Lasing Analysis/data/3A Time evolution tests/processed/quick data edit.py
+Lasing Analysis/data/3A Time evolution tests/processed/temperaturemap.py
