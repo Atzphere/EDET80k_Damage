@@ -23,9 +23,10 @@ class TemperatureCalibration:
 
     def true_temperature(self, T_observed, uncertainty=None, auto_uncertainty=False):
         ''' uncertainty is absolute '''
-        if uncertainty is None:
+        if uncertainty is None and not auto_uncertainty:
             return self.model_func(T_observed, *self.params)
         elif auto_uncertainty:
+            print("auto")
             return self.model_func(T_observed, *self.params), self.model_func_derivative(T_observed, *self.params) * get_base_uncertainties(T_observed)
         else:  # return value and propagated uncertainty
             return self.model_func(T_observed, *self.params), self.model_func_derivative(T_observed, *self.params) * uncertainty
@@ -37,7 +38,7 @@ class TemperatureCalibration:
 def get_base_uncertainties(data):
     uncertainties = XI400_LOWTEMP_UNCERTAINTY * np.ones(np.shape(data))
     hightemp_uncertainties = (data * XI400_UNCERTAINTY)
-    uncertainties[hightemp_uncertainties > uncertainties] = hightemp_uncertainties
+    uncertainties[hightemp_uncertainties > uncertainties] = hightemp_uncertainties[hightemp_uncertainties > uncertainties]
     return uncertainties
 
 temperature_TiW = TemperatureCalibration(
@@ -47,3 +48,4 @@ temperature_Al = TemperatureCalibration(
     (quad_temp_model, quad_temp_derivative, inverse_quad_temp, (0.04641396, -0.84202717, 34.0740448)))
 
 maps = {"TiW": temperature_TiW, "Al": temperature_Al}
+# print(maps["Al"].true_temperature(73.83))
