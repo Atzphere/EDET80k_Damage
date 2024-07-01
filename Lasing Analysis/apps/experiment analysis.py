@@ -4,18 +4,26 @@ import logging
 import beam_profiler as bp
 import numpy as np
 from scipy.signal import savgol_filter
+import dirtools as dt
+from matplotlib.pyplot import cm
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.WARN)
 
 
-files = ["3.0A 0.1S.pickle", "3.0A 0.3S.pickle", "3.0A 0.6S.pickle", "3.0A 1.0S.pickle",
-         "3.0A 1.1S.pickle", "3.0A 1.2S.pickle", ]
-DPATH = "../data/3A Time evolution tests/processed/"
+# files = ["3.0A 0.1S.pickle", "3.0A 0.3S.pickle", "3.0A 0.6S.pickle", "3.0A 1.0S.pickle",
+#          "3.0A 1.1S.pickle", "3.0A 1.2S.pickle", ]
+# DPATH = "../data/3A Time evolution tests/processed/"
+
+DPATH = "../data/1s Current evolution tests/processed/"
+files = sorted(list(filter(lambda name: "pickle" in name, dt.get_files(DPATH))))
+files.insert(0, files[-1])
+del files[-1]
+print(files)
+
 # just something that remotely resembles the beam profile
 BASE_GUESS = (-0.07, 0.05, 50, 40)
 NONGAUSSIAN_TOLERANCE = (100, 100, 100, 100)
-fig, ax = plt.subplots(6, 2)
 
 
 def process_file(f):
@@ -118,16 +126,23 @@ def get_stable_interval(time, data, pulse_length, start_cutoff=0.3, **kwargs):
 
     return np.array([start_index, beam_off])
 
+def get_sigma(time, sigma_arr, svar, pulse_length, **kwargs):
+    start, stop = get_stable_interval(time, svar, pulse_length, **kwargs)
+    clean_sigma = sigma_arr[start: stop]
+    return clean_sigma.mean(), clean_sigma.std()
+
+fig, ax = plt.subplots(len(files), 2)
+
+stable_beam_indices = []
 
 for num, f in enumerate(files):
     b, params, var, valid = process_file(DPATH + f)
     time = b["time"]
     pulse_length = b["duration"]
-    sigma = params[:, 1]
+    sigma_array = params[:, 1]
     svar = var[:, 1]
     temp = b["temp"]
-    ax[num, 0].plot(time, sigma, label="Sigma " + f)
-    ax[num, 0].plot(time, temp[:, 19], label="center temperature " + f)
+    # ax[num, 0].set_ylim(top=7)
     # ax[num, 0].set_xlim(0)
     # plt.show(block=False)
     ax[num, 1].semilogy(time, svar, label="Sigma Variance " + f)
@@ -135,16 +150,68 @@ for num, f in enumerate(files):
     beam_off = find_pulse_end(time, svar, pulse_length, ignore_cutoff=0.8, threshold=0.05)
     ax[num, 1].scatter(time[beam_off], 5, color="red", label="Detected beam end")
     ax[num, 1].scatter(pulse_length, 5, color="orange", label="Set beam end", alpha=0.5)
-    time_indices = get_stable_interval(time, svar, pulse_length, ignore_cutoff=0.8, threshold=0.05)
-    ax[num, 1].axvline(x=time[time_indices[0]], c="magenta")
-    ax[num, 1].axvline(x=time[time_indices[1]], c="magenta")
+    start, stop = get_stable_interval(time, svar, pulse_length, ignore_cutoff=0.8, threshold=0.05)
+    stable_beam_indices.append((start, stop))
+    ax[num, 1].axvline(x=time[start], c="magenta")
+    ax[num, 1].axvline(x=time[stop], c="magenta")
+
+    ax[num, 0].plot(time[start:stop], sigma_array[start:stop], label="Sigma " + f)
+    ax[num, 0].plot(time[start:stop], np.log(temp[:, 19])[start:stop], label="center temperature " + f)
 
     ax[num, 0].grid()
     ax[num, 1].grid()
     ax[num, 1].legend(loc="upper right")
     ax[num, 0].legend(loc="upper right")
-plt.show()
+# plt.show()
 
+fig, ax = plt.subplots(len(files))
+fig.tight_layout()
+for num, f in enumerate(files):
+    b, params, var, valid = process_file(DPATH + f)
+    time = b["time"]
+    pulse_length = b["duration"]
+    sigma_array = params[:, 1]
+    svar = var[:, 1]
+    temp = b["temp"]
+    x = b["x"]
+    current = b["current"]
+    temp_sigma = b["temp_sigma"]
+    start, stop = stable_beam_indices[num]
+    xstart, xstop = x[0], x[-1]
+    smooth_x = np.linspace(xstart, xstop, 500)
+    color = iter(cm.rainbow(np.linspace(0, 1, len(time))))
+    ax[num].set_title(f"{current} A {pulse_length} S")
+    for ind, time in enumerate(time):
+        c=next(color)
+        ax[num].errorbar(x, temp[ind], yerr=temp_sigma[ind], linestyle="None", ecolor=c)
+        ax[num].scatter(x, temp[ind], c=c, s=4, alpha=0.5)
+        ax[num].plot(smooth_x, bp.gaussian_fitfun(smooth_x, *params[ind]), c=c, label=f"{time:.3f}")
+        ax[num].set_ylim(bottom=-1, top=500)
+        ax[num].axhline(300, xstart, xstop, c="red", lw=0.5)
+
+ax[-1].legend(loc="lower right")
+plt.show(block=False)
+color = iter(cm.rainbow(np.linspace(0, 1, len(files))))
+fig, ax = plt.subplots()
+for num, f in enumerate(files):
+    c = next(color)
+    b, params, var, valid = process_file(DPATH + f)
+    time = b["time"]
+    pulse_length = b["duration"]
+    sigma_array = params[:, 1]
+    svar = var[:, 1]
+    temp = b["temp"]
+    current = b["current"]
+    temp_sigma = b["temp_sigma"] # standard deviation
+
+    start, stop = get_stable_interval(time, svar, pulse_length, ignore_cutoff=0.8, threshold=0.05, c=c)
+    y, dy = get_sigma(time, sigma_array, svar, pulse_length, ignore_cutoff=0.8, threshold=0.05)
+    ax.errorbar(pulse_length, y, yerr=dy, linestyle="None", marker="o", c=c)
+    ax.scatter(time, sigma_array, label=f"current {current} pl {pulse_length:.2f}", c=c, s=4)
+    ax.set_ylim(0, 10)
+    ax.legend()
+
+plt.show()
 # with open(f, 'rb') as handle:
 #     b = pickle.load(handle)
 
