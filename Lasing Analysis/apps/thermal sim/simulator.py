@@ -7,7 +7,7 @@ logging.basicConfig()
 logging.getLogger().setLevel(logging.WARNING)
 
 CHIP_DIMENSION = 30  # mm
-RESOLUTION = 100
+RESOLUTION = 99
 CHIP_THICKNESS = 0.030  # mm
 dx = CHIP_DIMENSION / RESOLUTION
 cell_area = dx**2
@@ -23,6 +23,7 @@ DENSITY = 0.002329002  # g/mm^3
 cell_mass = cell_area * CHIP_THICKNESS * DENSITY  # in g
 
 DISPLAY_FRAMERATE = 24
+PLAYBACKSPEED = 0.05 # affects display framerate too
 STOP_TIME = 7
 
 LASER_SIGMA = 0.08
@@ -32,14 +33,14 @@ def get_minimum_stable_timestep(dx, a):
     return dx**2 / (4 * a)
 
 
-TIMESTEP = get_minimum_stable_timestep(dx, DIFFUSIVITY)
+TIMESTEP = get_minimum_stable_timestep(dx, DIFFUSIVITY)  # / 4
 
 
 gamma = DIFFUSIVITY * (TIMESTEP / dx**2)
 times = np.arange(0, STOP_TIME, TIMESTEP)
 
 timesteps_per_second = round(1 / TIMESTEP)
-timesteps_per_frame = round(timesteps_per_second / DISPLAY_FRAMERATE)
+timesteps_per_frame = round((timesteps_per_second * PLAYBACKSPEED)/ (DISPLAY_FRAMERATE))
 
 timesteps_per_percent = round(len(times) / 100)
 
@@ -54,6 +55,7 @@ roi_mask = grid != 0
 grid[:, :] = AMBIENT_TEMPERATURE
 
 center = CHIP_DIMENSION / 2
+half_grid = RESOLUTION // 2 + 1
 CENTERPOINT = (center, center)
 
 left = np.roll(roi_mask, -1)
@@ -62,12 +64,14 @@ below = np.roll(roi_mask, 1, axis=0)
 above = np.roll(roi_mask, -1, axis=0)
 
 
-grid[roi_mask] = AMBIENT_TEMPERATURE + 56
+grid[roi_mask] = AMBIENT_TEMPERATURE
 
 states = []
 deltas = []
 deltas.append(np.zeros(np.shape(grid)))
 states.append(grid)
+
+xspace = np.linspace(0 - dx, CHIP_DIMENSION + dx, RESOLUTION + 2)
 
 def get_offset_meshgrid(x, y):
     '''
@@ -116,7 +120,8 @@ class LaserPulse(object):
         self.duration = duration
         self.end = start + duration
         self.modulators = modulators
-        self.params = params
+        if params is not None:
+            self.params = params
 
         self.rendered_beam_profile = []
         self.beam_modulation = []
@@ -201,15 +206,17 @@ def radialgeneric(radius, duration, n=1, phase=0, r0=None):
 
 print("Generating pulses", end="")
 
-pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.5, radialgeneric(10, 5, 5, r0=0)))
+# pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.5, radialgeneric(10, 5, 5, r0=0)))
 
-t = 5
 
-for x in range(4, 28, 2):
-    for y in range(4, 28, 2):
-        pulses.append(LaserPulse(t, 0.0578, (x, y), 0.5, sigma=0.3))
-        t += 0.05 + 0.008
-print(" ...done")
+# t = 1
+# for x in range(4, 28, 4):
+#     for y in range(4, 28, 4):
+#         pulses.append(LaserPulse(t, 0.0578, (x, y), 0.5, sigma=0.3))
+#         t += 2 * (0.05 + 0.008)
+# print(" ...done")
+
+pulses.append(LaserPulse(0, 2, CENTERPOINT, 0.5, sigma=0.3))
 
 print("\nRendering pulses", end="")
 
@@ -225,24 +232,26 @@ print("[", end="")
 K1 = (EMISSIVITY * SBC * cell_area) / (cell_mass * SPECIFIC_HEAT) * TIMESTEP
 temps = []
 
+
 progress = 0
 
 for n, t in enumerate(times):
     roi = grid[roi_mask]
     conduction = gamma * (grid[below] + grid[above] + grid[left] + grid[right] - 4 * roi)
+    delta = conduction
+
     # power output from radiation
-    radiation_power = (AMBIENT_TEMPERATURE - roi)**4
     # convert to temperature drop from radiation
+    radiation_power = (AMBIENT_TEMPERATURE - roi)**4
     radiation_temp = radiation_power * K1
 
-    delta = radiation_temp
-    delta += conduction
+    delta += radiation_temp
 
     for p in pulses:  # fire any lasing activities that should occur
         if p.is_active(t):
             delta += p.run()
 
-    temps.append(grid[50, 50])
+    temps.append(grid[half_grid, half_grid])
 
     grid[roi_mask] += delta
 
@@ -257,6 +266,7 @@ for n, t in enumerate(times):
 print("]")
 
 plt.plot(times, temps)
+plt.plot(times, 1600 * np.sin(times))
 
 
 for n, s in enumerate(states):
@@ -264,5 +274,5 @@ for n, s in enumerate(states):
 
 plt.show()
 
-ma.animate_2d_arrays(states, interval=(1 / DISPLAY_FRAMERATE)
+ma.animate_2d_arrays(states, interval=(1 / (DISPLAY_FRAMERATE))
                      * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
