@@ -134,6 +134,28 @@ def laser_beam(r, sigma, power):
 
 
 class LaserPulse(object):
+    '''
+    Object representing a single laser pulse.
+
+    Attributes:
+
+    x, y: float: the location of the pulse on the chip. Origin is the bottom left corner.
+
+    sigma: float: parameter determining the Gaussian FWHM
+
+    power: float: total power output of the laser. 100% of power incident upon the chip is absorbed in the sim;
+           you need significantly less power than IRL.
+
+    start: float: the start time of the pulse.
+
+    duration: float: the duration of the beam pulse.
+
+    modulators: functions: functions of time to modulate the beam power with. If multiple are given in
+          (float -> float) iterable, then their combined product is used. Canonically, this should be
+                           a function of range [0, 1] and domain encompassing [0, duration].
+
+    params: [tuple(...)] : parameters to pass to the modulators.
+    '''
     def __init__(self, start, duration, position, power, sigma=LASER_SIGMA, modulators=None, params=None):
         self.x, self.y = position
         self.sigma = sigma
@@ -176,6 +198,20 @@ class LaserPulse(object):
 
 
 class LaserStrobe(LaserPulse):
+    '''
+    A subclass of LaserPulse, containing methods to simulate a strobe - physically moving the laser
+    the chip during firing.
+
+    Novel attributes:
+    
+    parameterizion: Tuple(x(t), y(t)): Time - parameterization of the motion you wish to anneal with.
+                                       Be default, the point x(0), t(0) is placed at the specified position
+
+    pargs: Tuple(ParamX, ParamY): parameters (if needed) to pass to the parameterizer. 
+
+    offset: (offX, offY) : How to offset the parameterized model from its default position relative to the specified 
+                           position.
+    '''
     def __init__(self, start, duration, position, power, parameterization, pargs=None, offset=None, **kwargs):
         super().__init__(start, duration, position, power, **kwargs)
         fx, fy = parameterization
