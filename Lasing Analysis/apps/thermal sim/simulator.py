@@ -1,18 +1,27 @@
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
+import pickle
+import blosc
+import os
 import matplotlib_animtools as ma
+
+os.chdir(os.path.dirname(__file__))
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.WARNING)
 
 CHIP_DIMENSION = 30  # mm
-RESOLUTION = 99
+RESOLUTION = 101
 CHIP_THICKNESS = 0.030  # mm
 dx = CHIP_DIMENSION / RESOLUTION
 cell_area = dx**2
 
+NEUMANN = True
+EDGE_DERIVATIVE = 0 # du/dx on boundaries. 
+
 AMBIENT_TEMPERATURE = 300
+STARTING_TEMP = 300
 SBC = 5.670E-14  # stefan-boltzmann constant per square mm
 
 DIFFUSIVITY = 80  # mm^2 / s
@@ -23,7 +32,7 @@ DENSITY = 0.002329002  # g/mm^3
 cell_mass = cell_area * CHIP_THICKNESS * DENSITY  # in g
 
 DISPLAY_FRAMERATE = 24
-PLAYBACKSPEED = 0.05 # affects display framerate too
+PLAYBACKSPEED = 0.5 # affects display framerate too
 STOP_TIME = 7
 
 LASER_SIGMA = 0.08
@@ -52,7 +61,7 @@ grid[0, :] = 0
 grid[RESOLUTION + 1, :] = 0
 
 roi_mask = grid != 0
-grid[:, :] = AMBIENT_TEMPERATURE
+grid[:, :] = STARTING_TEMP
 
 center = CHIP_DIMENSION / 2
 half_grid = RESOLUTION // 2 + 1
@@ -63,8 +72,21 @@ right = np.roll(roi_mask, 1)
 below = np.roll(roi_mask, 1, axis=0)
 above = np.roll(roi_mask, -1, axis=0)
 
+left_boundary = np.zeros((RESOLUTION + 2, RESOLUTION + 2), dtype=bool)
 
-grid[roi_mask] = AMBIENT_TEMPERATURE
+left_boundary[1:-1,0] = True
+bottom_boundary = np.rot90(left_boundary)
+right_boundary = np.rot90(bottom_boundary)
+top_boundary = np.rot90(right_boundary)
+
+left_boundary_inner = np.zeros((RESOLUTION + 2, RESOLUTION + 2), dtype=bool)
+left_boundary_inner[1:-1,1] = True
+bottom_boundary_inner = np.rot90(left_boundary_inner)
+right_boundary_inner = np.rot90(bottom_boundary_inner)
+top_boundary_inner = np.rot90(right_boundary_inner)
+
+
+grid[roi_mask] = STARTING_TEMP
 
 states = []
 deltas = []
@@ -108,7 +130,7 @@ def laser_beam(r, sigma, power):
     Returns the intensity profile of the laser, given total power output (W)
     This gives a radial distribution.
     '''
-    return gaussian(r, sigma) * power
+    return gaussian(r, sigma) * power * cell_area
 
 
 class LaserPulse(object):
@@ -123,10 +145,10 @@ class LaserPulse(object):
         if params is not None:
             self.params = params
 
-        self.rendered_beam_profile = []
+        # self.rendered_beam_profile = []
         self.beam_modulation = []
         self.beam_instructions = None
-
+        self.rmg = radial_meshgrid(self.x, self.y)
         self.eval_time = np.arange(self.start, self.end, TIMESTEP) - self.start
 
         for time in self.eval_time:
@@ -135,19 +157,22 @@ class LaserPulse(object):
                 for m, p in zip(modulators, params):
                     coeff *= m(time, *p)
             self.beam_modulation.append(coeff)
+        self.beam_modulation = iter(self.beam_modulation)
 
-    def bake(self):
-        r = radial_meshgrid(self.x, self.y)
-        for coeff in self.beam_modulation:
-            self.rendered_beam_profile.append((coeff * laser_beam(r, self.sigma, self.power)
-                                               * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten().copy())
-        self.beam_instructions = iter(self.rendered_beam_profile)
 
     def is_active(self, time):
         return self.start <= time and time <= self.end
 
     def run(self):
-        return next(self.beam_instructions)
+        return (next(self.beam_modulation) * laser_beam(self.rmg, self.sigma, self.power)
+                                               * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten()
+
+    def __str__(self):
+        if self.modulators is not None:
+            m = str(len(self.modulators)) + "MOD)"
+        else:
+            m = "NOMOD)"
+        return f"Pulse({self.power}A{self.duration}S" + m
 
 
 class LaserStrobe(LaserPulse):
@@ -167,13 +192,12 @@ class LaserStrobe(LaserPulse):
         self.xc = fx(self.eval_time, *px) + self.x + ox
         self.yc = fy(self.eval_time, *py) + self.y + oy
 
-    def bake(self):
-        for x, y, coeff in zip(self.xc, self.yc, self.beam_modulation):
-            r = radial_meshgrid(x, y)
-            self.rendered_beam_profile.append((coeff * laser_beam(r, self.sigma, self.power)
-                                               * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten().copy())
-        self.beam_instructions = iter(self.rendered_beam_profile)
+        self.xym = zip(self.xc, self.yc, list(self.beam_modulation))
 
+    def run(self):
+        x, y, m = next(self.xym)
+        r = radial_meshgrid(x, y)
+        return (m * laser_beam(r, self.sigma, self.power) * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten()
 
 pulses = []
 
@@ -204,75 +228,100 @@ def radialgeneric(radius, duration, n=1, phase=0, r0=None):
 
     return xfunc, yfunc
 
-print("Generating pulses", end="")
+if __name__ == "__main__":
+    print("Generating pulses", end="")
 
-# pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.5, radialgeneric(10, 5, 5, r0=0)))
+    # pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.3, radialgeneric(15, 5, 5, r0=5)))
 
-
-# t = 1
-# for x in range(4, 28, 4):
-#     for y in range(4, 28, 4):
-#         pulses.append(LaserPulse(t, 0.0578, (x, y), 0.5, sigma=0.3))
-#         t += 2 * (0.05 + 0.008)
-# print(" ...done")
-
-pulses.append(LaserPulse(0, 2, CENTERPOINT, 0.5, sigma=0.3))
-
-print("\nRendering pulses", end="")
-
-for p in pulses:
-    p.bake()
-print(" ...done")
+    # pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.3, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: (t / (t + 0.01)) * 0)))
 
 
-print(f"Starting simulation: {round(STOP_TIME / TIMESTEP)} iterations.")
-print("[" + " " * 24 + "25" + " " * 23 + "50" + " " * 23 + "75" + " " * 24 + "]")
-print("[", end="")
-# precompute constants to optimize
-K1 = (EMISSIVITY * SBC * cell_area) / (cell_mass * SPECIFIC_HEAT) * TIMESTEP
-temps = []
+    t = 1
+    for x in range(4, 28, 4):
+        for y in range(4, 28, 4):
+            pulses.append(LaserPulse(t, 0.1, (x, y), 10, sigma=0.3))
+            t += 2 * (0.1)
+    print(" ...done")
+
+    # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
+
+    # pulses.append(LaserPulse(0, 0.5, CENTERPOINT, 1, sigma=0.3))
+    # pulses.append(LaserPulse(3, 0.5, CENTERPOINT, 1, sigma=0.3))
+
+    # print("\nRendering pulses", end="")
+
+    # for p in pulses:
+    #     p.bake()
+    # print(" ...done")
 
 
-progress = 0
-
-for n, t in enumerate(times):
-    roi = grid[roi_mask]
-    conduction = gamma * (grid[below] + grid[above] + grid[left] + grid[right] - 4 * roi)
-    delta = conduction
-
-    # power output from radiation
-    # convert to temperature drop from radiation
-    radiation_power = (AMBIENT_TEMPERATURE - roi)**4
-    radiation_temp = radiation_power * K1
-
-    delta += radiation_temp
-
-    for p in pulses:  # fire any lasing activities that should occur
-        if p.is_active(t):
-            delta += p.run()
-
-    temps.append(grid[half_grid, half_grid])
-
-    grid[roi_mask] += delta
-
-    if n % timesteps_per_frame == 0:
-        # print("yes")
-        deltas.append(delta.copy())
-        states.append(grid.copy())
-
-    if n % timesteps_per_percent == 0:
-        print("#", end="")
-        progress += 1
-print("]")
-
-plt.plot(times, temps)
-plt.plot(times, 1600 * np.sin(times))
+    print(f"Starting simulation: {round(STOP_TIME / TIMESTEP)} iterations.")
+    print("[" + " " * 24 + "25" + " " * 23 + "50" + " " * 23 + "75" + " " * 24 + "]")
+    print("[", end="")
+    # precompute constants to optimize
+    K1 = (EMISSIVITY * SBC * cell_area) / (cell_mass * SPECIFIC_HEAT) * TIMESTEP
+    temps = []
 
 
-for n, s in enumerate(states):
-    states[n] = s - 273.15
+    progress = 0
 
-plt.show()
+    for n, t in enumerate(times):
+        roi = grid[roi_mask]
+        if NEUMANN:
+            grid[left_boundary] = grid[left_boundary_inner] - EDGE_DERIVATIVE * dx
+            grid[bottom_boundary] = grid[bottom_boundary_inner] - EDGE_DERIVATIVE * dx
+            grid[right_boundary] = grid[right_boundary_inner] - EDGE_DERIVATIVE * dx
+            grid[top_boundary] = grid[top_boundary_inner] - EDGE_DERIVATIVE * dx
+            # print(grid[left_boundary])
 
-ma.animate_2d_arrays(states, interval=(1 / (DISPLAY_FRAMERATE))
-                     * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
+        conduction = gamma * (grid[below] + grid[above] + grid[left] + grid[right] - 4 * roi)
+        delta = conduction
+
+        # power output from radiation
+        # convert to temperature drop from radiation
+        radiation_power = (AMBIENT_TEMPERATURE**4 - roi**4)
+        radiation_temp = radiation_power * K1 * 10
+
+        delta += radiation_temp
+
+        for p in pulses:  # fire any lasing activities that should occur
+            if p.is_active(t):
+                delta += p.run()
+
+        temps.append(grid[half_grid, half_grid])
+
+        grid[roi_mask] += delta
+
+        if n % timesteps_per_frame == 0:
+            # print("yes")
+            deltas.append(delta.copy())
+            states.append(grid.copy())
+
+        if n % timesteps_per_percent == 0:
+            print("#", end="")
+            progress += 1
+    print("]")
+
+    plt.plot(times, temps)
+    plt.plot(times, 1600 * np.sin(times))
+
+
+    for n, s in enumerate(states):
+        states[n] = s - 273.15
+
+    plt.show()
+
+    ma.animate_2d_arrays(states, interval=(1 / (DISPLAY_FRAMERATE))
+                         * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
+
+
+    pickled_data = pickle.dumps((states, deltas))  # returns data as a bytes object
+    compressed_pickle = blosc.compress(pickled_data)
+
+    tag = "foobtest_"
+
+    fname = tag + " ".join([str(p) for p in pulses]) + ".pkl"
+    print(fname)
+    # fname = "test.pkl"
+    with open("../saves/" + fname, "wb") as f:
+        f.write(compressed_pickle)
