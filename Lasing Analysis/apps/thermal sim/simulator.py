@@ -5,8 +5,13 @@ import pickle
 import blosc
 import os
 import matplotlib_animtools as ma
+import PositionVoltageConverter_Standalone as pvcs
 
 os.chdir(os.path.dirname(__file__))
+
+TAG = "foobtest_"  # prefix to save the results under
+
+DENSE_LOGGING = False  # whether or not to dump the entire simulation to file
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.WARNING)
@@ -14,11 +19,12 @@ logging.getLogger().setLevel(logging.WARNING)
 CHIP_DIMENSION = 30  # mm
 RESOLUTION = 101
 CHIP_THICKNESS = 0.030  # mm
-dx = CHIP_DIMENSION / RESOLUTION
-cell_area = dx**2
+USE_SPAR = False
+SPAR_THICKNESS = 0.5  # mm
+SPAR_WIDTH = 1  # mm
 
 NEUMANN = True
-EDGE_DERIVATIVE = 0 # du/dx on boundaries. 
+EDGE_DERIVATIVE = 0  # du/dx on boundaries. 
 
 AMBIENT_TEMPERATURE = 300
 STARTING_TEMP = 300
@@ -29,14 +35,24 @@ EMISSIVITY = 0.09
 SPECIFIC_HEAT = 0.7  # j g^-1 C^-1
 DENSITY = 0.002329002  # g/mm^3
 
-cell_mass = cell_area * CHIP_THICKNESS * DENSITY  # in g
-
 DISPLAY_FRAMERATE = 24
-PLAYBACKSPEED = 0.5 # affects display framerate too
+PLAYBACKSPEED = 0.5  # changes the sampling rate of the video array and playback speed accordingly to maintain DISPLAY_FRAMERATE.
 STOP_TIME = 7
 
-LASER_SIGMA = 0.08
+DEFAULT_LASER_SIGMA = 0.08
 
+
+center = CHIP_DIMENSION / 2
+half_grid = RESOLUTION // 2
+CENTERPOINT = (center, center)
+
+dx = CHIP_DIMENSION / RESOLUTION
+cell_area = dx**2
+cell_mass = cell_area * CHIP_THICKNESS * DENSITY  # in g
+
+spar_multi = CHIP_THICKNESS / SPAR_THICKNESS
+spar_width_cells = int(SPAR_WIDTH // dx)
+spar_extension_cells = (spar_width_cells - 1) // 2
 
 def get_minimum_stable_timestep(dx, a):
     return dx**2 / (4 * a)
@@ -60,12 +76,19 @@ grid[:, RESOLUTION + 1] = 0
 grid[0, :] = 0
 grid[RESOLUTION + 1, :] = 0
 
+spar_coefficients = np.ones((RESOLUTION, RESOLUTION))
+spar_coefficients[:, half_grid - spar_extension_cells:half_grid + 1 + spar_extension_cells] = spar_multi
+spar_coefficients[half_grid - spar_extension_cells:half_grid + 1 + spar_extension_cells, :] = spar_multi
+
+spar_coefficients = spar_coefficients.flatten()
+
+
+# plt.imshow(spar_coefficients)
+# plt.show()
+
 roi_mask = grid != 0
 grid[:, :] = STARTING_TEMP
 
-center = CHIP_DIMENSION / 2
-half_grid = RESOLUTION // 2 + 1
-CENTERPOINT = (center, center)
 
 left = np.roll(roi_mask, -1)
 right = np.roll(roi_mask, 1)
@@ -88,10 +111,18 @@ top_boundary_inner = np.rot90(right_boundary_inner)
 
 grid[roi_mask] = STARTING_TEMP
 
-states = []
-deltas = []
-deltas.append(np.zeros(np.shape(grid)))
-states.append(grid)
+
+if DENSE_LOGGING:
+    dense_states = []
+    dense_deltas = []
+    dense_deltas.append(np.zeros(np.shape(grid)))
+    dense_states.append(grid)
+
+else:
+    states = []
+    deltas = []
+    deltas.append(np.zeros(np.shape(grid)))
+    states.append(grid)
 
 xspace = np.linspace(0 - dx, CHIP_DIMENSION + dx, RESOLUTION + 2)
 
@@ -156,7 +187,7 @@ class LaserPulse(object):
 
     params: [tuple(...)] : parameters to pass to the modulators.
     '''
-    def __init__(self, start, duration, position, power, sigma=LASER_SIGMA, modulators=None, params=None):
+    def __init__(self, start, duration, position, power, sigma=DEFAULT_LASER_SIGMA, modulators=None, params=None):
         self.x, self.y = position
         self.sigma = sigma
         self.power = power
@@ -203,7 +234,7 @@ class LaserStrobe(LaserPulse):
     the chip during firing.
 
     Novel attributes:
-    
+
     parameterizion: Tuple(x(t), y(t)): Time - parameterization of the motion you wish to anneal with.
                                        Be default, the point x(0), t(0) is placed at the specified position
 
@@ -235,8 +266,8 @@ class LaserStrobe(LaserPulse):
         r = radial_meshgrid(x, y)
         return (m * laser_beam(r, self.sigma, self.power) * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten()
 
-pulses = []
 
+pulses = []
 
 
 def radialgeneric(radius, duration, n=1, phase=0, r0=None):
@@ -264,20 +295,20 @@ def radialgeneric(radius, duration, n=1, phase=0, r0=None):
 
     return xfunc, yfunc
 
+
 if __name__ == "__main__":
     print("Generating pulses", end="")
 
-    # pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.3, radialgeneric(15, 5, 5, r0=5)))
+    pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
 
-    # pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 0.3, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: (t / (t + 0.01)) * 0)))
+    pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: 30 * (t / 5))))
 
-
-    t = 1
-    for x in range(4, 28, 4):
-        for y in range(4, 28, 4):
-            pulses.append(LaserPulse(t, 0.1, (x, y), 10, sigma=0.3))
-            t += 2 * (0.1)
-    print(" ...done")
+    # t = 1
+    # for x in range(4, 28, 4):
+    #     for y in range(4, 28, 4):
+    #         pulses.append(LaserPulse(t, 0.1, (x, y), 10, sigma=0.15))
+    #         t += 2 * (0.1)
+    # print(" ...done")
 
     # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
 
@@ -298,7 +329,6 @@ if __name__ == "__main__":
     K1 = (EMISSIVITY * SBC * cell_area) / (cell_mass * SPECIFIC_HEAT) * TIMESTEP
     temps = []
 
-
     progress = 0
 
     for n, t in enumerate(times):
@@ -317,21 +347,28 @@ if __name__ == "__main__":
         # convert to temperature drop from radiation
         radiation_power = (AMBIENT_TEMPERATURE**4 - roi**4)
         radiation_temp = radiation_power * K1 * 10
+        if USE_SPAR:
+            radiation_temp *= spar_coefficients
+            multi = spar_coefficients
+        else:
+            multi = 1
 
         delta += radiation_temp
 
         for p in pulses:  # fire any lasing activities that should occur
             if p.is_active(t):
-                delta += p.run()
+                delta += p.run() * multi
 
         temps.append(grid[half_grid, half_grid])
 
         grid[roi_mask] += delta
 
-        if n % timesteps_per_frame == 0:
-            # print("yes")
+        if n % timesteps_per_frame == 0 and not DENSE_LOGGING:
             deltas.append(delta.copy())
             states.append(grid.copy())
+        elif DENSE_LOGGING:
+            dense_deltas.append(delta.copy())
+            dense_states.append(grid.copy())
 
         if n % timesteps_per_percent == 0:
             print("#", end="")
@@ -339,8 +376,6 @@ if __name__ == "__main__":
     print("]")
 
     plt.plot(times, temps)
-    plt.plot(times, 1600 * np.sin(times))
-
 
     for n, s in enumerate(states):
         states[n] = s - 273.15
@@ -350,14 +385,14 @@ if __name__ == "__main__":
     ma.animate_2d_arrays(states, interval=(1 / (DISPLAY_FRAMERATE))
                          * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
 
-
-    pickled_data = pickle.dumps((states, deltas))  # returns data as a bytes object
+    if DENSE_LOGGING:
+        pickled_data = pickle.dumps((dense_states, dense_deltas))
+        TAG += "_DENSE"
+    else:
+        pickled_data = pickle.dumps((states, deltas))  # returns data as a bytes object
     compressed_pickle = blosc.compress(pickled_data)
 
-    tag = "foobtest_"
-
-    fname = tag + " ".join([str(p) for p in pulses]) + ".pkl"
+    fname = TAG + " ".join([str(p) for n, p in enumerate(pulses) if n > 3]) + ".pkl"
     print(fname)
-    # fname = "test.pkl"
     with open("../saves/" + fname, "wb") as f:
         f.write(compressed_pickle)
