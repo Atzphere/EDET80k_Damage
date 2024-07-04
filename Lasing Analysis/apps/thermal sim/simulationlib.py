@@ -171,6 +171,7 @@ class Simulation(object):
 
     def simulate(self, analyzers=None):
         grid = self.simgrid.grid_template.copy()
+        grid[50, 50] = 6000
         grid[:, 0] = 0
         grid[:, self.simgrid.RESOLUTION + 1] = 0
         grid[0, :] = 0
