@@ -9,390 +9,346 @@ import PositionVoltageConverter_Standalone as pvcs
 
 os.chdir(os.path.dirname(__file__))
 
-TAG = "foobtest_"  # prefix to save the results under
-
-DENSE_LOGGING = False  # whether or not to dump the entire simulation to file
-
-logging.basicConfig()
-logging.getLogger().setLevel(logging.WARNING)
-
-CHIP_DIMENSION = 30  # mm
-RESOLUTION = 101
-CHIP_THICKNESS = 0.030  # mm
-USE_SPAR = False
-SPAR_THICKNESS = 0.5  # mm
-SPAR_WIDTH = 1  # mm
-
-NEUMANN = True
-EDGE_DERIVATIVE = 0  # du/dx on boundaries. 
-
-AMBIENT_TEMPERATURE = 300
-STARTING_TEMP = 300
 SBC = 5.670E-14  # stefan-boltzmann constant per square mm
 
-DIFFUSIVITY = 80  # mm^2 / s
-EMISSIVITY = 0.09
-SPECIFIC_HEAT = 0.7  # j g^-1 C^-1
-DENSITY = 0.002329002  # g/mm^3
-
-DISPLAY_FRAMERATE = 24
-PLAYBACKSPEED = 0.5  # changes the sampling rate of the video array and playback speed accordingly to maintain DISPLAY_FRAMERATE.
-STOP_TIME = 7
-
-DEFAULT_LASER_SIGMA = 0.08
-
-
-center = CHIP_DIMENSION / 2
-half_grid = RESOLUTION // 2
-CENTERPOINT = (center, center)
-
-dx = CHIP_DIMENSION / RESOLUTION
-cell_area = dx**2
-cell_mass = cell_area * CHIP_THICKNESS * DENSITY  # in g
-
-spar_multi = CHIP_THICKNESS / SPAR_THICKNESS
-spar_width_cells = int(SPAR_WIDTH // dx)
-spar_extension_cells = (spar_width_cells - 1) // 2
 
 def get_minimum_stable_timestep(dx, a):
     return dx**2 / (4 * a)
 
 
-TIMESTEP = get_minimum_stable_timestep(dx, DIFFUSIVITY)  # / 4
-
-
-gamma = DIFFUSIVITY * (TIMESTEP / dx**2)
-times = np.arange(0, STOP_TIME, TIMESTEP)
-
-timesteps_per_second = round(1 / TIMESTEP)
-timesteps_per_frame = round((timesteps_per_second * PLAYBACKSPEED)/ (DISPLAY_FRAMERATE))
-
-timesteps_per_percent = round(len(times) / 100)
-
-
-grid = np.ones((RESOLUTION + 2, RESOLUTION + 2))
-grid[:, 0] = 0
-grid[:, RESOLUTION + 1] = 0
-grid[0, :] = 0
-grid[RESOLUTION + 1, :] = 0
-
-spar_coefficients = np.ones((RESOLUTION, RESOLUTION))
-spar_coefficients[:, half_grid - spar_extension_cells:half_grid + 1 + spar_extension_cells] = spar_multi
-spar_coefficients[half_grid - spar_extension_cells:half_grid + 1 + spar_extension_cells, :] = spar_multi
-
-spar_coefficients = spar_coefficients.flatten()
-
-
-# plt.imshow(spar_coefficients)
-# plt.show()
-
-roi_mask = grid != 0
-grid[:, :] = STARTING_TEMP
-
-
-left = np.roll(roi_mask, -1)
-right = np.roll(roi_mask, 1)
-below = np.roll(roi_mask, 1, axis=0)
-above = np.roll(roi_mask, -1, axis=0)
-
-left_boundary = np.zeros((RESOLUTION + 2, RESOLUTION + 2), dtype=bool)
-
-left_boundary[1:-1,0] = True
-bottom_boundary = np.rot90(left_boundary)
-right_boundary = np.rot90(bottom_boundary)
-top_boundary = np.rot90(right_boundary)
-
-left_boundary_inner = np.zeros((RESOLUTION + 2, RESOLUTION + 2), dtype=bool)
-left_boundary_inner[1:-1,1] = True
-bottom_boundary_inner = np.rot90(left_boundary_inner)
-right_boundary_inner = np.rot90(bottom_boundary_inner)
-top_boundary_inner = np.rot90(right_boundary_inner)
-
-
-grid[roi_mask] = STARTING_TEMP
-
-
-if DENSE_LOGGING:
-    dense_states = []
-    dense_deltas = []
-    dense_deltas.append(np.zeros(np.shape(grid)))
-    dense_states.append(grid)
-
-else:
-    states = []
-    deltas = []
-    deltas.append(np.zeros(np.shape(grid)))
-    states.append(grid)
-
-xspace = np.linspace(0 - dx, CHIP_DIMENSION + dx, RESOLUTION + 2)
-
-def get_offset_meshgrid(x, y):
-    '''
-    Builds a meshgrid of values corresponding to coordinates on the sim
-    with the origin at x, y
-    '''
-    # x and y are the cartesian coordinates of the origin
-    bx = np.linspace(0, CHIP_DIMENSION, RESOLUTION) - x
-    by = np.linspace(0, CHIP_DIMENSION, RESOLUTION) - CHIP_DIMENSION + y
-
-    return np.meshgrid(bx, by)
-
-
-def radial_meshgrid(x, y):
-    '''
-    Returns meshgrid of radius values which can be passed to a distribution
-    function for lasing.
-    '''
-    xm, ym = get_offset_meshgrid(x, y)
-    r = np.sqrt(xm**2 + ym**2)
-
-    return r
-
-
-def gaussian(r, sigma):
-    '''
-    Returns a normalized gaussian profile.
-    '''
-    return (1 / (2 * np.pi * sigma**2)) * np.exp((-1 / 2) * (r**2 / sigma**2))
-
-
-def laser_beam(r, sigma, power):
-    '''
-    Returns the intensity profile of the laser, given total power output (W)
-    This gives a radial distribution.
-    '''
-    return gaussian(r, sigma) * power * cell_area
-
-
-class LaserPulse(object):
-    '''
-    Object representing a single laser pulse.
-
-    Attributes:
-
-    x, y: float: the location of the pulse on the chip. Origin is the bottom left corner.
-
-    sigma: float: parameter determining the Gaussian FWHM
-
-    power: float: total power output of the laser. 100% of power incident upon the chip is absorbed in the sim;
-           you need significantly less power than IRL.
-
-    start: float: the start time of the pulse.
-
-    duration: float: the duration of the beam pulse.
-
-    modulators: functions: functions of time to modulate the beam power with. If multiple are given in
-          (float -> float) iterable, then their combined product is used. Canonically, this should be
-                           a function of range [0, 1] and domain encompassing [0, duration].
-
-    params: [tuple(...)] : parameters to pass to the modulators.
-    '''
-    def __init__(self, start, duration, position, power, sigma=DEFAULT_LASER_SIGMA, modulators=None, params=None):
-        self.x, self.y = position
-        self.sigma = sigma
-        self.power = power
-        self.start = start
+class Measurer(object):
+    def __init__(self, start_time, duration, measurement, tag, timestep=None):
+        self.start_time = start_time
         self.duration = duration
-        self.end = start + duration
-        self.modulators = modulators
-        if params is not None:
-            self.params = params
+        self.measurement = measurement
+        self.timestep = timestep
+        self.tag = tag
 
-        # self.rendered_beam_profile = []
-        self.beam_modulation = []
-        self.beam_instructions = None
-        self.rmg = radial_meshgrid(self.x, self.y)
-        self.eval_time = np.arange(self.start, self.end, TIMESTEP) - self.start
-
-        for time in self.eval_time:
-            coeff = 1
-            if modulators is not None:
-                for m, p in zip(modulators, params):
-                    coeff *= m(time, *p)
-            self.beam_modulation.append(coeff)
-        self.beam_modulation = iter(self.beam_modulation)
-
+        self.last_meaurement_time = -np.inf
 
     def is_active(self, time):
-        return self.start <= time and time <= self.end
-
-    def run(self):
-        return (next(self.beam_modulation) * laser_beam(self.rmg, self.sigma, self.power)
-                                               * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten()
-
-    def __str__(self):
-        if self.modulators is not None:
-            m = str(len(self.modulators)) + "MOD)"
+        if self.timestep is not None:
+            return (time - self.last_meaurement_time >= self.timestep) and time >= self.start_time and time < self.start_time + self.duration
         else:
-            m = "NOMOD)"
-        return f"Pulse({self.power}A{self.duration}S" + m
+            return time >= self.start_time and time < self.start_time + self.duration
+
+    def check_measure(self, time, grid):
+        if self.is_active(time):
+            return self.measurement.measure(grid)
 
 
-class LaserStrobe(LaserPulse):
+class Measurement(object):
+    default_samplers = {"ALL": lambda T, x, y: T,
+                        "MEAN": lambda T, x, y: np.mean(T),
+                        "STD": lambda T, x, y: T.std(),
+                        "MAX": lambda T, x, y: (np.max(T), x[np.where(T == np.max(T))], y[np.where(T == np.max(T))])}
+
+    def __init__(self, measurearea, modes=["ALL"]):
+        self.modes = modes
+        self.methods = []
+        self.measurearea = measurearea
+        for mode in modes:
+            if mode in Measurement.default_samplers.keys():
+                self.methods.append(Measurement.default_samplers[mode])
+            else:
+                self.methods.append()
+
+    def measure(self, state):
+        '''
+        state is RxR
+        '''
+        measurements = []
+        temps = state[self.measurearea.mask]
+        x = self.measurearea.x_pos
+        y = self.measurearea.y_pos
+        for m in self.methods:
+            measurements.append(m(temps, x, y))
+
+        return measurements
+
+
+class MeasureArea(object):
     '''
-    A subclass of LaserPulse, containing methods to simulate a strobe - physically moving the laser
-    the chip during firing.
+    mask of cells to read along with their x, y positions.
 
-    Novel attributes:
+    Generate an offset meshgrid, with origin centered on the location of the measure area.
 
-    parameterizion: Tuple(x(t), y(t)): Time - parameterization of the motion you wish to anneal with.
-                                       Be default, the point x(0), t(0) is placed at the specified position
+    shapemaker is a function that takes that meshgrid and returns true/false depending on whether
+    or not to measure in a region.
 
-    pargs: Tuple(ParamX, ParamY): parameters (if needed) to pass to the parameterizer. 
-
-    offset: (offX, offY) : How to offset the parameterized model from its default position relative to the specified 
-                           position.
-    '''
-    def __init__(self, start, duration, position, power, parameterization, pargs=None, offset=None, **kwargs):
-        super().__init__(start, duration, position, power, **kwargs)
-        fx, fy = parameterization
-        if pargs is not None:
-            px, py = pargs
-        else:
-            px = py = ()
-
-        if offset is not None:
-            ox, oy = offset
-        else:
-            ox, oy = 0, 0
-
-        self.xc = fx(self.eval_time, *px) + self.x + ox
-        self.yc = fy(self.eval_time, *py) + self.y + oy
-
-        self.xym = zip(self.xc, self.yc, list(self.beam_modulation))
-
-    def run(self):
-        x, y, m = next(self.xym)
-        r = radial_meshgrid(x, y)
-        return (m * laser_beam(r, self.sigma, self.power) * (TIMESTEP / (cell_mass * SPECIFIC_HEAT))).flatten()
-
-
-pulses = []
-
-
-def radialgeneric(radius, duration, n=1, phase=0, r0=None):
-    '''
-    Generates parameterizations for x(t), y(t)
-    which complete n revolutions over a duration on radius r, and phase shift
-    Start from radius r0, go to r linearly (circular if r0 not specified).
+    these are applied to ROI, not the entire grid (RxR)
 
     '''
-    # a revolution occurs over 2pi
-    # duration needs to mapped to 2pi * n
-    omega = (2 * np.pi * n) / duration
 
-    def r(t):
-        if r0 is None:
-            return radius
+    def __init__(self, grid, location, shapemaker):
+        '''
+        location: (x, y)
+        '''
+        x, y = grid.physical_meshgrid
+        ox, oy = grid.get_offset_meshgrid(*location)
+        self.mask = shapemaker(ox, oy)
+        self.x_pos, self.y_pos = x[self.mask], y[self.mask]
+
+
+class Material(object):
+    def __init__(self, diffusivity, emissivity, specific_heat, density):
+        self.DIFFUSIVITY = diffusivity
+        self.EMISSIVITY = emissivity
+        self.SPECIFIC_HEAT = specific_heat
+        self.DENSITY = density
+
+
+class SimGrid(object):
+    def __init__(self, dimension, resolution, thickness, use_spar=False, spar_thickness=0.5, spar_width=1):
+        self.CHIP_DIMENSION = dimension
+        self.RESOLUTION = resolution
+        self.CHIP_THICKNESS = thickness
+        self.USE_SPAR = use_spar
+        self.SPAR_THICKNESS = spar_thickness
+        self.SPAR_WIDTH = spar_width
+
+        self.center = self.CHIP_DIMENSION / 2
+        self.half_grid = self.RESOLUTION // 2
+        self.CENTERPOINT = (self.center, self.center)
+        self.dx = self.CHIP_DIMENSION / self.RESOLUTION
+        self.cell_area = self.dx**2
+
+        self.spar_multi = self.CHIP_THICKNESS / self.SPAR_THICKNESS
+        self.spar_width_cells = int(self.SPAR_WIDTH // self.dx)
+        self.spar_extension_cells = (self.spar_width_cells - 1) // 2
+        self.grid_template = np.ones(
+            (self.RESOLUTION + 2, self.RESOLUTION + 2))
+        self.innergrid_template = np.ones(
+            (self.RESOLUTION, self.RESOLUTION))
+
+        self.physical_meshgrid = self.get_offset_meshgrid(0, 0)
+
+    def get_offset_meshgrid(self, x, y):
+        '''
+        Builds a meshgrid of values corresponding to coordinates on the sim
+        with the origin at x, y
+        '''
+        # x and y are the cartesian coordinates of the origin
+        bx = np.linspace(0, self.CHIP_DIMENSION, self.RESOLUTION) - x
+        by = np.linspace(0, self.CHIP_DIMENSION,
+                         self.RESOLUTION) - self.CHIP_DIMENSION + y
+
+        return np.meshgrid(bx, by)
+
+
+class Simulation(object):
+    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1):
+        self.simgrid = simgrid
+        self.material = material
+        self.pulses = pulses
+        self.STOP_TIME = duration
+        self.AMBIENT_TEMPERATURE = ambient_temp
+        self.STARTING_TEMP = starting_temp
+        self.NEUMANN_BC = neumann_bc
+        self.EDGE_DERIVATIVE = edge_derivative
+        self.SAMPLE_FRAMERATE = sample_framerate
+        self.INTENDED_PBS = 1
+        self.DENSE_LOGGING = dense_logging
+        self.TIMESTEP_MULTI = timestep_multi
+        self.evaluated = False
+        self.PLAYBACKSPEED = intended_pbs
+
+        self.cell_mass = self.simgrid.cell_area * \
+            self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
+
+        self.TIMESTEP = get_minimum_stable_timestep(
+            self.simgrid.dx, self.material.DIFFUSIVITY)  # / 4
+
+        self.gamma = self.material.DIFFUSIVITY * \
+            (self.TIMESTEP / self.simgrid.dx**2)
+        self.times = np.arange(0, self.STOP_TIME, self.TIMESTEP)
+
+        self.timesteps_per_second = round(1 / self.TIMESTEP)
+        self.timesteps_per_frame = round(
+            (self.timesteps_per_second * self.PLAYBACKSPEED) / (self.SAMPLE_FRAMERATE))
+
+        self.timesteps_per_percent = round(len(self.times) / 100)
+
+    def simulate(self, analyzers=None):
+        grid = self.simgrid.grid_template.copy()
+        grid[:, 0] = 0
+        grid[:, self.simgrid.RESOLUTION + 1] = 0
+        grid[0, :] = 0
+        grid[self.simgrid.RESOLUTION + 1, :] = 0
+
+        roi_mask = grid != 0
+        grid[:, :] = self.STARTING_TEMP
+
+        spar_coefficients = self.simgrid.innergrid_template.copy()
+        spar_coefficients[:, self.simgrid.half_grid - self.simgrid.spar_extension_cells:self.simgrid.half_grid +
+                          1 + self.simgrid.spar_extension_cells] = self.simgrid.spar_multi
+        spar_coefficients[self.simgrid.half_grid - self.simgrid.spar_extension_cells:self.simgrid.half_grid +
+                          1 + self.simgrid.spar_extension_cells, :] = self.simgrid.spar_multi
+
+        spar_coefficients = spar_coefficients.flatten()
+
+        left = np.roll(roi_mask, -1)
+        right = np.roll(roi_mask, 1)
+        below = np.roll(roi_mask, 1, axis=0)
+        above = np.roll(roi_mask, -1, axis=0)
+
+        left_boundary = np.zeros(
+            (self.simgrid.RESOLUTION + 2, self.simgrid.RESOLUTION + 2), dtype=bool)
+
+        left_boundary[1:-1, 0] = True
+        bottom_boundary = np.rot90(left_boundary)
+        right_boundary = np.rot90(bottom_boundary)
+        top_boundary = np.rot90(right_boundary)
+
+        left_boundary_inner = np.zeros(
+            (self.simgrid.RESOLUTION + 2, self.simgrid.RESOLUTION + 2), dtype=bool)
+        left_boundary_inner[1:-1, 1] = True
+        bottom_boundary_inner = np.rot90(left_boundary_inner)
+        right_boundary_inner = np.rot90(bottom_boundary_inner)
+        top_boundary_inner = np.rot90(right_boundary_inner)
+
+        grid[roi_mask] = self.STARTING_TEMP
+
+        if self.DENSE_LOGGING:
+            dense_states = []
+            dense_deltas = []
+            dense_deltas.append(np.zeros(np.shape(grid)))
+            dense_states.append(grid)
+
         else:
-            return (radius - r0) * (t / duration)
+            states = []
+            deltas = []
+            deltas.append(np.zeros(np.shape(grid)))
+            states.append(grid)
 
-    def xfunc(t):
-        return r(t) * np.cos(omega * t + phase)
+        # xspace = np.linspace(0 - self.dx, self.CHIP_DIMENSION + self.dx, self.RESOLUTION + 2)
 
-    def yfunc(t):
-        return r(t) * np.sin(omega * t + phase)
+        print("Generating pulses", end="")
 
-    return xfunc, yfunc
+        # pulses.append(LaserStrobe(0.5, 5, self.CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
 
+        # pulses.append(LaserStrobe(0.5, 5, self.CENTERPOINT, 6, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: 30 * (t / 5))))
 
-if __name__ == "__main__":
-    print("Generating pulses", end="")
+        # t = 1
+        # for x in range(4, 28, 4):
+        #     for y in range(4, 28, 4):
+        #         pulses.append(LaserPulse(t, 0.1, (x, y), 10, sigma=0.15))
+        #         t += 2 * (0.1)
+        # print(" ...done")
 
-    pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
+        # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
 
-    pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: 30 * (t / 5))))
+        # pulses.append(LaserPulse(0, 0.5, CENTERPOINT, 1, sigma=0.3))
+        # pulses.append(LaserPulse(3, 0.5, CENTERPOINT, 1, sigma=0.3))
 
-    # t = 1
-    # for x in range(4, 28, 4):
-    #     for y in range(4, 28, 4):
-    #         pulses.append(LaserPulse(t, 0.1, (x, y), 10, sigma=0.15))
-    #         t += 2 * (0.1)
-    # print(" ...done")
+        # print("\nRendering pulses", end="")
 
-    # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
+        # for p in pulses:
+        #     p.bake()
+        # print(" ...done")
 
-    # pulses.append(LaserPulse(0, 0.5, CENTERPOINT, 1, sigma=0.3))
-    # pulses.append(LaserPulse(3, 0.5, CENTERPOINT, 1, sigma=0.3))
+        print(
+            f"Starting simulation: {round(self.STOP_TIME / self.TIMESTEP)} iterations.")
+        print("[" + " " * 24 + "25" + " " * 23 +
+              "50" + " " * 23 + "75" + " " * 24 + "]")
+        print("[", end="")
+        # precompute constants to optimize
+        K1 = (self.material.EMISSIVITY * SBC * self.simgrid.cell_area) / \
+            (self.cell_mass * self.material.SPECIFIC_HEAT) * self.TIMESTEP
+        temps = []
 
-    # print("\nRendering pulses", end="")
+        progress = 0
 
-    # for p in pulses:
-    #     p.bake()
-    # print(" ...done")
+        for n, t in enumerate(self.times):
+            roi = grid[roi_mask]
+            if self.NEUMANN_BC:
+                grid[left_boundary] = grid[left_boundary_inner] - \
+                    self.EDGE_DERIVATIVE * self.simgrid.dx
+                grid[bottom_boundary] = grid[bottom_boundary_inner] - \
+                    self.EDGE_DERIVATIVE * self.simgrid.dx
+                grid[right_boundary] = grid[right_boundary_inner] - \
+                    self.EDGE_DERIVATIVE * self.simgrid.dx
+                grid[top_boundary] = grid[top_boundary_inner] - \
+                    self.EDGE_DERIVATIVE * self.simgrid.dx
+                # print(grid[left_boundary])
 
+            conduction = self.gamma * \
+                (grid[below] + grid[above] +
+                 grid[left] + grid[right] - 4 * roi)
+            delta = conduction
 
-    print(f"Starting simulation: {round(STOP_TIME / TIMESTEP)} iterations.")
-    print("[" + " " * 24 + "25" + " " * 23 + "50" + " " * 23 + "75" + " " * 24 + "]")
-    print("[", end="")
-    # precompute constants to optimize
-    K1 = (EMISSIVITY * SBC * cell_area) / (cell_mass * SPECIFIC_HEAT) * TIMESTEP
-    temps = []
+            # power output from radiation
+            # convert to temperature drop from radiation
+            radiation_power = (self.AMBIENT_TEMPERATURE**4 - roi**4)
+            radiation_temp = radiation_power * K1 * 10
+            if self.simgrid.USE_SPAR:
+                radiation_temp *= spar_coefficients
+                multi = spar_coefficients
+            else:
+                multi = 1
 
-    progress = 0
+            delta += radiation_temp
 
-    for n, t in enumerate(times):
-        roi = grid[roi_mask]
-        if NEUMANN:
-            grid[left_boundary] = grid[left_boundary_inner] - EDGE_DERIVATIVE * dx
-            grid[bottom_boundary] = grid[bottom_boundary_inner] - EDGE_DERIVATIVE * dx
-            grid[right_boundary] = grid[right_boundary_inner] - EDGE_DERIVATIVE * dx
-            grid[top_boundary] = grid[top_boundary_inner] - EDGE_DERIVATIVE * dx
-            # print(grid[left_boundary])
+            if self.pulses is not None:
+                 / (cell_mass * SPECIFIC_HEAT)
+                laser_delta = self.simgrid.innergrid_template.copy()
+                laser_delta[:,:] = 0
+                for p in self.pulses:  # fire any lasing activities that should occur
+                    if p.is_active(t):
+                        delta += p.run() * multi
 
-        conduction = gamma * (grid[below] + grid[above] + grid[left] + grid[right] - 4 * roi)
-        delta = conduction
+            temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid])
 
-        # power output from radiation
-        # convert to temperature drop from radiation
-        radiation_power = (AMBIENT_TEMPERATURE**4 - roi**4)
-        radiation_temp = radiation_power * K1 * 10
-        if USE_SPAR:
-            radiation_temp *= spar_coefficients
-            multi = spar_coefficients
+            grid[roi_mask] += delta
+
+            if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:
+                deltas.append(delta.copy())
+                states.append(grid.copy())
+            elif self.DENSE_LOGGING:
+                dense_deltas.append(delta.copy())
+                dense_states.append(grid.copy())
+
+            if n % self.timesteps_per_percent == 0:
+                print("#", end="")
+                progress += 1
+        print("]")
+        print("Simulation done.")
+
+        plt.plot(self.times, temps)
+        plt.show()
+
+        for n, s in enumerate(states):
+            states[n] = s - 273.15  # convert to celsius
+
+        ma.animate_2d_arrays(states, interval=(1 / (self.SAMPLE_FRAMERATE))
+                             * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
+
+        self.evaluated = True
+        if self.DENSE_LOGGING:
+            self.sim_states = dense_states
+            self.sim_deltas = dense_deltas
+            return dense_states, dense_deltas
         else:
-            multi = 1
+            self.sim_states = states
+            self.sim_deltas = deltas
+            return states, deltas
 
-        delta += radiation_temp
+        if False:
+            if self.DENSE_LOGGING:
+                pickled_data = pickle.dumps((dense_states, dense_deltas))
+                TAG = "foobtest_"  # prefix to save the results under
+                TAG += "_DENSE"
+            else:
+                # returns data as a bytes object
+                pickled_data = pickle.dumps((states, deltas))
+            compressed_pickle = blosc.compress(pickled_data)
 
-        for p in pulses:  # fire any lasing activities that should occur
-            if p.is_active(t):
-                delta += p.run() * multi
+            fname = TAG + " ".join([str(p)
+                                    for n, p in enumerate(pulses) if n > 3]) + ".pkl"
+            print(fname)
+            with open("../saves/" + fname, "wb") as f:
+                f.write(compressed_pickle)
 
-        temps.append(grid[half_grid, half_grid])
 
-        grid[roi_mask] += delta
-
-        if n % timesteps_per_frame == 0 and not DENSE_LOGGING:
-            deltas.append(delta.copy())
-            states.append(grid.copy())
-        elif DENSE_LOGGING:
-            dense_deltas.append(delta.copy())
-            dense_states.append(grid.copy())
-
-        if n % timesteps_per_percent == 0:
-            print("#", end="")
-            progress += 1
-    print("]")
-
-    plt.plot(times, temps)
-
-    for n, s in enumerate(states):
-        states[n] = s - 273.15
-
-    plt.show()
-
-    ma.animate_2d_arrays(states, interval=(1 / (DISPLAY_FRAMERATE))
-                         * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
-
-    if DENSE_LOGGING:
-        pickled_data = pickle.dumps((dense_states, dense_deltas))
-        TAG += "_DENSE"
-    else:
-        pickled_data = pickle.dumps((states, deltas))  # returns data as a bytes object
-    compressed_pickle = blosc.compress(pickled_data)
-
-    fname = TAG + " ".join([str(p) for n, p in enumerate(pulses) if n > 3]) + ".pkl"
-    print(fname)
-    with open("../saves/" + fname, "wb") as f:
-        f.write(compressed_pickle)
+logging.basicConfig()
+logging.getLogger().setLevel(logging.WARNING)
