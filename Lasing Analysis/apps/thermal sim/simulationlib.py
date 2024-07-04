@@ -157,7 +157,7 @@ class Simulation(object):
             self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
 
         self.TIMESTEP = get_minimum_stable_timestep(
-            self.simgrid.dx, self.material.DIFFUSIVITY)  # / 4
+            self.simgrid.dx, self.material.DIFFUSIVITY)  * self.TIMESTEP_MULTI
 
         self.gamma = self.material.DIFFUSIVITY * \
             (self.TIMESTEP / self.simgrid.dx**2)
@@ -223,7 +223,7 @@ class Simulation(object):
 
         # xspace = np.linspace(0 - self.dx, self.CHIP_DIMENSION + self.dx, self.RESOLUTION + 2)
 
-        print("Generating pulses", end="")
+        print("Generating pulses")
 
         # pulses.append(LaserStrobe(0.5, 5, self.CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
 
@@ -256,7 +256,7 @@ class Simulation(object):
         K1 = (self.material.EMISSIVITY * SBC * self.simgrid.cell_area) / \
             (self.cell_mass * self.material.SPECIFIC_HEAT) * self.TIMESTEP
         temps = []
-
+        laser_delta = self.simgrid.innergrid_template.copy().flatten()
         progress = 0
 
         for n, t in enumerate(self.times):
@@ -283,22 +283,22 @@ class Simulation(object):
             radiation_temp = radiation_power * K1 * 10
             if self.simgrid.USE_SPAR:
                 radiation_temp *= spar_coefficients
-                multi = spar_coefficients
+                spar_multi = spar_coefficients
             else:
-                multi = 1
+                spar_multi = 1
 
             delta += radiation_temp
 
             if self.pulses is not None:
-                 / (cell_mass * SPECIFIC_HEAT)
-                laser_delta = self.simgrid.innergrid_template.copy()
-                laser_delta[:,:] = 0
+                laser_delta[:] = 0
                 for p in self.pulses:  # fire any lasing activities that should occur
                     if p.is_active(t):
-                        delta += p.run() * multi
+                        laser_delta += p.run(t)
+                        # print(max(laser_delta))
+                delta += laser_delta * (self.TIMESTEP * spar_multi) / (self.cell_mass * self.material.SPECIFIC_HEAT)
 
             temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid])
-
+            grid[roi_mask] += delta
             grid[roi_mask] += delta
 
             if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:

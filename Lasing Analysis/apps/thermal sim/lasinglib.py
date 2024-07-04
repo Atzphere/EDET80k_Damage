@@ -1,41 +1,13 @@
+import numpy as np
+
 DEFAULT_LASER_SIGMA = 0.08
-
-def get_offset_meshgrid(x, y):
-    '''
-    Builds a meshgrid of values corresponding to coordinates on the sim
-    with the origin at x, y
-    '''
-    # x and y are the cartesian coordinates of the origin
-    bx = np.linspace(0, CHIP_DIMENSION, RESOLUTION) - x
-    by = np.linspace(0, CHIP_DIMENSION, RESOLUTION) - CHIP_DIMENSION + y
-
-    return np.meshgrid(bx, by)
-
-
-def radial_meshgrid(x, y):
-    '''
-    Returns meshgrid of radius values which can be passed to a distribution
-    function for lasing.
-    '''
-    xm, ym = get_offset_meshgrid(x, y)
-    r = np.sqrt(xm**2 + ym**2)
-
-    return r
 
 
 def gaussian(r, sigma):
     '''
-    Returns a normalized gaussian profile.
+    Returns a gaussian profile with its integral over R^2 normalized to identity.
     '''
     return (1 / (2 * np.pi * sigma**2)) * np.exp((-1 / 2) * (r**2 / sigma**2))
-
-
-def laser_beam(r, sigma, power):
-    '''
-    Returns the intensity profile of the laser, given total power output (W)
-    This gives a radial distribution.
-    '''
-    return gaussian(r, sigma) * power * cell_area
 
 
 class LaserPulse(object):
@@ -44,7 +16,10 @@ class LaserPulse(object):
 
     Attributes:
 
-    x, y: float: the location of the pulse on the chip. Origin is the bottom left corner.
+    grid: a simulationlib SimGrid object representing the surface the laser will be
+          projected over.
+
+    position -> x, y: float: the location of the pulse on the chip. Origin is the bottom left corner.
 
     sigma: float: parameter determining the Gaussian FWHM
 
@@ -62,12 +37,13 @@ class LaserPulse(object):
     params: [tuple(...)] : parameters to pass to the modulators.
     '''
 
-    def __init__(self, start, duration, position, power, sigma=DEFAULT_LASER_SIGMA, modulators=None, params=None):
-        self.x, self.y = position
+    def __init__(self, grid, start, duration, position, power, sigma=DEFAULT_LASER_SIGMA, modulators=None, params=None):
+        self.simgrid = grid
         self.sigma = sigma
         self.power = power
         self.start = start
         self.duration = duration
+        self.x, self.y = position
         self.end = start + duration
         self.modulators = modulators
         if params is not None:
@@ -76,23 +52,51 @@ class LaserPulse(object):
         # self.rendered_beam_profile = []
         self.beam_modulation = []
         self.beam_instructions = None
-        self.rmg = radial_meshgrid(self.x, self.y)
-        self.eval_time = np.arange(self.start, self.end, TIMESTEP) - self.start
+        self.rmg = self.radial_meshgrid(self.x, self.y)
 
-        for time in self.eval_time:
-            coeff = 1
-            if modulators is not None:
-                for m, p in zip(modulators, params):
-                    coeff *= m(time, *p)
-            self.beam_modulation.append(coeff)
-        self.beam_modulation = iter(self.beam_modulation)
+    def get_offset_meshgrid(self, x, y):
+        '''
+        Builds a meshgrid of values corresponding to coordinates on the sim
+        with the origin at x, y
+        '''
+        # x and y are the cartesian coordinates of the origin
+        cdim = self.simgrid.CHIP_DIMENSION
+        res = self.simgrid.RESOLUTION
+        bx = np.linspace(0, cdim, res) - x
+        by = np.linspace(0, cdim, res) - cdim + y
+
+        return np.meshgrid(bx, by)
+
+    def radial_meshgrid(self, x, y):
+        '''
+        Returns meshgrid of radius values which can be passed to a distribution
+        function for lasing.
+        '''
+        xm, ym = self.get_offset_meshgrid(x, y)
+        r = np.sqrt(xm**2 + ym**2)
+
+        return r
+
+    def laser_beam(self, r, sigma, power):
+        '''
+        Returns the intensity profile of the laser, given total power output (W)
+        This gives a radial distribution.
+        '''
+        return gaussian(r, sigma) * power * self.simgrid.cell_area
+
+    def modulate_beam(self, time):
+        t = time - self.start
+        coeff = 1
+        if self.modulators is not None:
+            for m, p in zip(self.modulators, self.params):
+                coeff *= m(t, *p)
+        return coeff
 
     def is_active(self, time):
         return self.start <= time and time <= self.end
 
-    def run(self):
-        return (next(self.beam_modulation) * laser_beam(self.rmg, self.sigma, self.power)
-                * TIMESTEP).flatten()
+    def run(self, time):
+        return (self.modulate_beam(time) * self.laser_beam(self.rmg, self.sigma, self.power)).flatten().copy()
 
     def __str__(self):
         if self.modulators is not None:
@@ -118,28 +122,29 @@ class LaserStrobe(LaserPulse):
                            position.
     '''
 
-    def __init__(self, start, duration, position, power, parameterization, pargs=None, offset=None, **kwargs):
-        super().__init__(start, duration, position, power, **kwargs)
-        fx, fy = parameterization
+    def __init__(self, grid, start, duration, position, power, parameterization, pargs=None, offset=None, **kwargs):
+        super().__init__(grid, start, duration, position, power, **kwargs)
+        self.fx, self.fy = parameterization
         if pargs is not None:
-            px, py = pargs
+            self.px, self.py = pargs
         else:
-            px = py = ()
+            self.px = self.py = ()
 
         if offset is not None:
-            ox, oy = offset
+            self.ox, self.oy = offset
         else:
-            ox, oy = 0, 0
+            self.ox, self.oy = 0, 0
 
-        self.xc = fx(self.eval_time, *px) + self.x + ox
-        self.yc = fy(self.eval_time, *py) + self.y + oy
+    def move_beam(self, time):
+        t = time - self.start
+        return (self.fx(t, *self.px) + self.x + self.ox,
+                self.fy(t, *self.py) + self.y + self.oy)
 
-        self.xym = zip(self.xc, self.yc, list(self.beam_modulation))
-
-    def run(self):
-        x, y, m = next(self.xym)
-        r = radial_meshgrid(x, y)
-        return (m * laser_beam(r, self.sigma, self.power) * TIMESTEP).flatten()
+    def run(self, time):
+        m = self.modulate_beam(time)
+        x, y, = self.move_beam(time)
+        r = self.radial_meshgrid(x, y)
+        return (m * self.laser_beam(r, self.sigma, self.power)).flatten()
 
 
 pulses = []
