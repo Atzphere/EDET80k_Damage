@@ -36,7 +36,7 @@ SPECIFIC_HEAT = 0.7  # j g^-1 C^-1
 DENSITY = 0.002329002  # g/mm^3
 
 DISPLAY_FRAMERATE = 24
-PLAYBACKSPEED = 0.5  # changes the sampling rate of the video array and playback speed accordingly to maintain DISPLAY_FRAMERATE.
+PLAYBACKSPEED = 1  # changes the sampling rate of the video array and playback speed accordingly to maintain DISPLAY_FRAMERATE.
 STOP_TIME = 7
 
 DEFAULT_LASER_SIGMA = 0.08
@@ -269,7 +269,6 @@ class LaserStrobe(LaserPulse):
 
 pulses = []
 
-
 def radialgeneric(radius, duration, n=1, phase=0, r0=None):
     '''
     Generates parameterizations for x(t), y(t)
@@ -299,9 +298,9 @@ def radialgeneric(radius, duration, n=1, phase=0, r0=None):
 if __name__ == "__main__":
     print("Generating pulses", end="")
 
-    pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
+    # pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
 
-    pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: 30 * (t / 5))))
+    # pulses.append(LaserStrobe(0.5, 5, CENTERPOINT, 6, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: 30 * (t / 5))))
 
     # t = 1
     # for x in range(4, 28, 4):
@@ -313,7 +312,7 @@ if __name__ == "__main__":
     # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
 
     # pulses.append(LaserPulse(0, 0.5, CENTERPOINT, 1, sigma=0.3))
-    # pulses.append(LaserPulse(3, 0.5, CENTERPOINT, 1, sigma=0.3))
+    pulses.append(LaserPulse(0, 1, (15, 15), 15, sigma=0.3))
 
     # print("\nRendering pulses", end="")
 
@@ -330,9 +329,9 @@ if __name__ == "__main__":
     temps = []
 
     progress = 0
-
     for n, t in enumerate(times):
         roi = grid[roi_mask]
+        # print(roi)
         if NEUMANN:
             grid[left_boundary] = grid[left_boundary_inner] - EDGE_DERIVATIVE * dx
             grid[bottom_boundary] = grid[bottom_boundary_inner] - EDGE_DERIVATIVE * dx

@@ -137,7 +137,7 @@ class SimGrid(object):
 
 
 class Simulation(object):
-    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1):
+    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1, radiation=True):
         self.simgrid = simgrid
         self.material = material
         self.pulses = pulses
@@ -152,6 +152,7 @@ class Simulation(object):
         self.TIMESTEP_MULTI = timestep_multi
         self.evaluated = False
         self.PLAYBACKSPEED = intended_pbs
+        self.use_radiation = radiation
 
         self.cell_mass = self.simgrid.cell_area * \
             self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
@@ -171,7 +172,6 @@ class Simulation(object):
 
     def simulate(self, analyzers=None):
         grid = self.simgrid.grid_template.copy()
-        grid[50, 50] = 6000
         grid[:, 0] = 0
         grid[:, self.simgrid.RESOLUTION + 1] = 0
         grid[0, :] = 0
@@ -244,9 +244,6 @@ class Simulation(object):
 
         # print("\nRendering pulses", end="")
 
-        # for p in pulses:
-        #     p.bake()
-        # print(" ...done")
 
         print(
             f"Starting simulation: {round(self.STOP_TIME / self.TIMESTEP)} iterations.")
@@ -262,6 +259,7 @@ class Simulation(object):
 
         for n, t in enumerate(self.times):
             roi = grid[roi_mask]
+
             if self.NEUMANN_BC:
                 grid[left_boundary] = grid[left_boundary_inner] - \
                     self.EDGE_DERIVATIVE * self.simgrid.dx
@@ -271,7 +269,6 @@ class Simulation(object):
                     self.EDGE_DERIVATIVE * self.simgrid.dx
                 grid[top_boundary] = grid[top_boundary_inner] - \
                     self.EDGE_DERIVATIVE * self.simgrid.dx
-                # print(grid[left_boundary])
 
             conduction = self.gamma * \
                 (grid[below] + grid[above] +
@@ -288,18 +285,17 @@ class Simulation(object):
             else:
                 spar_multi = 1
 
-            delta += radiation_temp
+            if self.use_radiation:
+                delta += radiation_temp
 
             if self.pulses is not None:
                 laser_delta[:] = 0
                 for p in self.pulses:  # fire any lasing activities that should occur
                     if p.is_active(t):
                         laser_delta += p.run(t)
-                        # print(max(laser_delta))
                 delta += laser_delta * (self.TIMESTEP * spar_multi) / (self.cell_mass * self.material.SPECIFIC_HEAT)
 
             temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid])
-            grid[roi_mask] += delta
             grid[roi_mask] += delta
 
             if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:

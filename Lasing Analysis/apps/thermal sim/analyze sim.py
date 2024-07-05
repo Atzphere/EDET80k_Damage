@@ -7,13 +7,13 @@ from simulator import TIMESTEP
 
 DISPLAY_FRAMERATE = 24
 
-SLOWMO = 0.05
+SLOWMO = 1
 SPEEDUP = round(1 / SLOWMO)
 
 SHAPE = 101
 
 os.chdir(os.path.dirname(__file__))
-DPATH = "../saves/foobtest_Pulse(0.5A2SNOMOD).pkl"
+DPATH = "./saves/test.pkl"
 
 
 with open(DPATH, "rb") as f:
