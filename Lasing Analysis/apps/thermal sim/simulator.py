@@ -269,7 +269,6 @@ class LaserStrobe(LaserPulse):
 
 pulses = []
 
-
 def radialgeneric(radius, duration, n=1, phase=0, r0=None):
     '''
     Generates parameterizations for x(t), y(t)
@@ -313,7 +312,7 @@ if __name__ == "__main__":
     # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
 
     # pulses.append(LaserPulse(0, 0.5, CENTERPOINT, 1, sigma=0.3))
-    # pulses.append(LaserPulse(3, 0.5, CENTERPOINT, 1, sigma=0.3))
+    pulses.append(LaserPulse(0, 1, (15, 15), 15, sigma=0.3))
 
     # print("\nRendering pulses", end="")
 
@@ -330,9 +329,9 @@ if __name__ == "__main__":
     temps = []
 
     progress = 0
-    grid[50, 50] = 6000
     for n, t in enumerate(times):
         roi = grid[roi_mask]
+        # print(roi)
         if NEUMANN:
             grid[left_boundary] = grid[left_boundary_inner] - EDGE_DERIVATIVE * dx
             grid[bottom_boundary] = grid[bottom_boundary_inner] - EDGE_DERIVATIVE * dx
