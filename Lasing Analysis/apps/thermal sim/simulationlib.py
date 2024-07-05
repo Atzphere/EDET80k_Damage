@@ -288,18 +288,17 @@ class Simulation(object):
             else:
                 spar_multi = 1
 
-            delta += radiation_temp
+            if self.use_radiation:
+                delta += radiation_temp
 
             if self.pulses is not None:
                 laser_delta[:] = 0
                 for p in self.pulses:  # fire any lasing activities that should occur
                     if p.is_active(t):
                         laser_delta += p.run(t)
-                        # print(max(laser_delta))
                 delta += laser_delta * (self.TIMESTEP * spar_multi) / (self.cell_mass * self.material.SPECIFIC_HEAT)
 
             temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid])
-            grid[roi_mask] += delta
             grid[roi_mask] += delta
 
             if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:
