@@ -14,6 +14,7 @@ def animate_2d_arrays(arrays, interval=200, repeat=True, cmap='viridis', repeat_
     """
     fig, ax = plt.subplots()
     im = ax.imshow(arrays[0], cmap=cmap, interpolation="gaussian", vmin=vmin, vmax=vmax)
+    fig.colorbar(im)
 
     def update(frame):
         im.set_array(arrays[frame])
