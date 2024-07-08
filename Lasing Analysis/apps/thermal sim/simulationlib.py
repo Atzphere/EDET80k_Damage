@@ -70,6 +70,7 @@ class Measurer(object):
         '''
         if self.is_active(time):
             results = {}
+            self.last_meaurement_time = time
             for m, t in zip(self.measurementsself.tags):
                 if t not in results.keys():
                     results.update({t: [m.measure(grid)]})
@@ -77,6 +78,10 @@ class Measurer(object):
                     results[t].append(m.measure(grid))
 
             return results
+
+        else:
+            return None
+
 
 
 class Measurement(object):
@@ -176,7 +181,7 @@ class SimGrid(object):
                    extra mass on the chip. This is included in radiation and irradiation
                    calculations but not conduction for now because I don't want to think
                    about how to ensure inhomogenous heat simulation stays stable.
-    
+
     SPAR_THICKNESS float: the entire thickness of the chip in the spar regions, including
                           the nominal thickness of the chip.
 
@@ -271,6 +276,7 @@ class Simulation(object):
         self.PLAYBACKSPEED = intended_pbs
         self.use_radiation = radiation
         self.progress_bar = progress_bar
+        self.recorded_data = {}
 
         self.cell_mass = self.simgrid.cell_area * \
             self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
@@ -289,6 +295,7 @@ class Simulation(object):
         self.timesteps_per_percent = round(len(self.times) / 100)
 
     def simulate(self, analyzers=None):
+        recorded_data = {}
         # initalize simulation plane
         grid = self.simgrid.grid_template.copy()
         grid[:, 0] = 0
@@ -301,6 +308,16 @@ class Simulation(object):
 
         # initial conditions
         grid[:, :] = self.STARTING_TEMP
+
+        def _try_measurements(t):
+            for a in analyzers:
+                result = a.check_measure(t, grid[roi_mask])
+                if result is not None:
+                    for k in result.keys():
+                        if k not in recorded_data.keys():
+                            recorded_data.update({k: [result[k]]})
+                        else:
+                            recorded_data[k].append(result[k])
 
         # initialize spar
         spar_coefficients = self.simgrid.innergrid_template.copy()
@@ -338,6 +355,8 @@ class Simulation(object):
 
         grid[roi_mask] = self.STARTING_TEMP
 
+        _try_measurements(0)
+
         if self.DENSE_LOGGING:
             dense_states = []
             dense_deltas = []
@@ -361,7 +380,7 @@ class Simulation(object):
         # precompute constants to optimize
         K1 = (self.material.EMISSIVITY * SBC * self.simgrid.cell_area) / \
             (self.cell_mass * self.material.SPECIFIC_HEAT) * self.TIMESTEP
-        temps = []
+
         laser_delta = self.simgrid.innergrid_template.copy().flatten()
         progress = 0
 
@@ -403,8 +422,9 @@ class Simulation(object):
                         laser_delta += p.run(t)
                 delta += laser_delta * (self.TIMESTEP * spar_multi) / (self.cell_mass * self.material.SPECIFIC_HEAT)
 
-            temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid] - 273.15)
             grid[roi_mask] += delta
+
+            _try_measurements(t)
 
             if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:
                 deltas.append(delta.copy())
@@ -420,24 +440,24 @@ class Simulation(object):
             print("]")
         print("Simulation done.")
 
-        plt.plot(self.times, temps)
-        plt.show()
-
-        for n, s in enumerate(states):
-            states[n] = s - 273.15  # convert to celsius
-
-        ma.animate_2d_arrays(states, interval=(1 / (self.SAMPLE_FRAMERATE))
-                             * 1000, repeat_delay=0, cmap="magma", vmin=0, vmax=450)
-
         self.evaluated = True
         if self.DENSE_LOGGING:
+            for n, s in enumerate(dense_states):
+                dense_states[n] = s - 273.15  # convert to celsius
             self.sim_states = dense_states
             self.sim_deltas = dense_deltas
-            return dense_states, dense_deltas
+
         else:
+            for n, s in enumerate(states):
+                states[n] = s - 273.15  # convert to celsius
             self.sim_states = states
             self.sim_deltas = deltas
-            return states, deltas
+
+        recorded_data.update({"states": self.sim_states, "deltas": self.sim_deltas})
+        self.recorded_data = recorded_data
+        self.evaluated = True
+
+        return self.recorded_data
 
     def save(self, fname=None):
         if self.DENSE_LOGGING:
