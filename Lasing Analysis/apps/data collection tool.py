@@ -16,7 +16,7 @@ os.chdir(r"C:\Users\ssuub\Desktop\Damage analysis\EDET80k_Damage\Lasing Analysis
 done = False
 optris_connection = cs.COMInterface("COM4")
 
-DPATH = "../data/1S Current evolution tests/"
+DPATH = "../data/2.5A 1S Current modulation/"
 OUTPUT_PATH = "processed/"
 
 
@@ -116,6 +116,7 @@ def process_file(f):
         profiles.append(TempProfileDataset(dset, profile_key, **params))
     processed = sum(profiles)
     processed.data, processed.dsigma = temperaturemap.maps['Al'].true_temperature(processed.data, auto_uncertainty=True)
+    
     return processed
 
 def get_values(prompts):
