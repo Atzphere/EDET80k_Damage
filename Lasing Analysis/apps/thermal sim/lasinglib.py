@@ -48,6 +48,8 @@ class LaserPulse(object):
         self.modulators = modulators
         if params is not None:
             self.params = params
+        else:
+            self.params = None
 
         # self.rendered_beam_profile = []
         self.beam_modulation = []
@@ -87,9 +89,14 @@ class LaserPulse(object):
     def modulate_beam(self, time):
         t = time - self.start
         coeff = 1
+
         if self.modulators is not None:
-            for m, p in zip(self.modulators, self.params):
-                coeff *= m(t, *p)
+            if self.params is not None:
+                for m, p in zip(self.modulators, self.params):
+                    coeff *= m(t, *p)
+            else:
+                for m in self.modulators:
+                    coeff *= m(t)
         return coeff
 
     def is_active(self, time):
@@ -150,7 +157,26 @@ class LaserStrobe(LaserPulse):
 pulses = []
 
 
-def radialgeneric(radius, duration, n=1, phase=0, r0=None):
+def genericpolar(omega, r, phase=0):
+    '''
+    Generates parameterizations for x(t), y(t)
+    which complete n revolutions over a duration on radius r, and phase shift
+    Start from radius r0, go to r linearly (circular if r0 not specified).
+
+    '''
+    # a revolution occurs over 2pi
+    # duration needs to mapped to 2pi * n
+
+    def xfunc(t):
+        return r(t) * np.cos(omega * t + phase)
+
+    def yfunc(t):
+        return r(t) * np.sin(omega * t + phase)
+
+    return xfunc, yfunc
+
+
+def linearspiral(radius, duration, n=1, phase=0, r0=None):
     '''
     Generates parameterizations for x(t), y(t)
     which complete n revolutions over a duration on radius r, and phase shift
