@@ -137,7 +137,7 @@ class SimGrid(object):
 
 
 class Simulation(object):
-    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1, radiation=True):
+    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True):
         self.simgrid = simgrid
         self.material = material
         self.pulses = pulses
@@ -153,6 +153,7 @@ class Simulation(object):
         self.evaluated = False
         self.PLAYBACKSPEED = intended_pbs
         self.use_radiation = radiation
+        self.progress_bar = progress_bar
 
         self.cell_mass = self.simgrid.cell_area * \
             self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
@@ -222,34 +223,14 @@ class Simulation(object):
             deltas.append(np.zeros(np.shape(grid)))
             states.append(grid)
 
-        # xspace = np.linspace(0 - self.dx, self.CHIP_DIMENSION + self.dx, self.RESOLUTION + 2)
-
-        print("Generating pulses")
-
-        # pulses.append(LaserStrobe(0.5, 5, self.CENTERPOINT, 6, radialgeneric(15, 5, 5, r0=5)))
-
-        # pulses.append(LaserStrobe(0.5, 5, self.CENTERPOINT, 6, (lambda t: 14 * np.sin(18 * np.pi * t), lambda t: 30 * (t / 5))))
-
-        # t = 1
-        # for x in range(4, 28, 4):
-        #     for y in range(4, 28, 4):
-        #         pulses.append(LaserPulse(t, 0.1, (x, y), 10, sigma=0.15))
-        #         t += 2 * (0.1)
-        # print(" ...done")
-
-        # pulses.append(LaserPulse(0, 6, (x, y), 0.2, sigma=0.15))
-
-        # pulses.append(LaserPulse(0, 0.5, CENTERPOINT, 1, sigma=0.3))
-        # pulses.append(LaserPulse(3, 0.5, CENTERPOINT, 1, sigma=0.3))
-
-        # print("\nRendering pulses", end="")
-
-
         print(
             f"Starting simulation: {round(self.STOP_TIME / self.TIMESTEP)} iterations.")
-        print("[" + " " * 24 + "25" + " " * 23 +
-              "50" + " " * 23 + "75" + " " * 24 + "]")
-        print("[", end="")
+
+        if self.progress_bar:
+            print("[" + " " * 24 + "25" + " " * 23 +
+                  "50" + " " * 23 + "75" + " " * 24 + "]")
+            print("[", end="")
+
         # precompute constants to optimize
         K1 = (self.material.EMISSIVITY * SBC * self.simgrid.cell_area) / \
             (self.cell_mass * self.material.SPECIFIC_HEAT) * self.TIMESTEP
@@ -305,10 +286,11 @@ class Simulation(object):
                 dense_deltas.append(delta.copy())
                 dense_states.append(grid.copy())
 
-            if n % self.timesteps_per_percent == 0:
+            if n % self.timesteps_per_percent == 0 and self.progress_bar:
                 print("#", end="")
                 progress += 1
-        print("]")
+        if self.progress_bar:
+            print("]")
         print("Simulation done.")
 
         plt.plot(self.times, temps)
