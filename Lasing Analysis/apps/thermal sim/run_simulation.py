@@ -1,12 +1,14 @@
 import simulationlib as sl
 import lasinglib as ll
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
-SILICON = sl.Material(80, 0.09, 0.7, 0.002329002)
+SILICON = sl.Material(88, 0.09, 0.7, 0.002329002)
 CHIP = sl.SimGrid(30, 101, 0.03, use_spar=False,
                   spar_thickness=0.5, spar_width=1)
 
-sim = sl.Simulation(CHIP, SILICON, duration=15, pulses=None, ambient_temp=300,
+sim = sl.Simulation(CHIP, SILICON, duration=10, pulses=None, ambient_temp=300,
                     starting_temp=300, neumann_bc=True,
                     edge_derivative=0, sample_framerate=24, intended_pbs=1,
                     dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True)
@@ -46,22 +48,30 @@ def makeRampedPulse(up_time, hold_time, down_time, power_rampup=1, power_rampdow
 
     return function
 
-# for t in np.linspace(0, 9, 30):
-#     print(makeRampedPulse(3, 3, 3)(t))
 
+CENTERPOINT = sl.MeasureArea(CHIP, CHIP.CENTERPOINT, lambda x, y: np.logical_and(x == 0, y == 0))
+CENTERMEASURE = sl.Measurement(CENTERPOINT, modes=["MEAN"])
+
+RECORD_CENTER_TEMPERATURE = sl.Measurer(0, 5.5, CENTERMEASURE, "CENTER")
+
+measurements = [RECORD_CENTER_TEMPERATURE]
 
 a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
                   modulators=[makeRampedPulse(3, 1, 3, 4, 4)])
-a = ll.LaserPulse(CHIP, 0.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
+b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
                   modulators=[make_exp_pulse(3, 1, 1)])
 # a = ll.LaserStrobe(CHIP, 0.5, 3, CHIP.CENTERPOINT, 6, sigma=0.18, modulators=(lambda t: np.exp(
 #     (t - 0.5)) / 1.5,), parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
 
 # make class for list of pulses to auto sequence
 
-pulses.append(a)
+pulses = [a, b]
 
 sim.pulses = pulses
 
 
-sim.simulate()
+sim.simulate(measurements)
+# sim.animate(repeat_delay=0, cmap="magma", vmin=0, vmax=450)
+
+plt.plot(sim.recorded_data["CENTER time"], sim.recorded_data["CENTER MEAN"])
+plt.show()
