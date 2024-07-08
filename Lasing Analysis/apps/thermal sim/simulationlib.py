@@ -276,7 +276,7 @@ class Simulation(object):
                         laser_delta += p.run(t)
                 delta += laser_delta * (self.TIMESTEP * spar_multi) / (self.cell_mass * self.material.SPECIFIC_HEAT)
 
-            temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid])
+            temps.append(grid[self.simgrid.half_grid, self.simgrid.half_grid] - 273.15)
             grid[roi_mask] += delta
 
             if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:
@@ -312,21 +312,21 @@ class Simulation(object):
             self.sim_deltas = deltas
             return states, deltas
 
-        if False:
-            if self.DENSE_LOGGING:
-                pickled_data = pickle.dumps((dense_states, dense_deltas))
-                TAG = "foobtest_"  # prefix to save the results under
-                TAG += "_DENSE"
-            else:
-                # returns data as a bytes object
-                pickled_data = pickle.dumps((states, deltas))
-            compressed_pickle = blosc.compress(pickled_data)
+    def save(self, fname=None):
+        if self.DENSE_LOGGING:
+            pickled_data = pickle.dumps((dense_states, dense_deltas))
+            TAG = "foobtest_"  # prefix to save the results under
+            TAG += "_DENSE"
+        else:
+            # returns data as a bytes object
+            pickled_data = pickle.dumps((states, deltas))
+        compressed_pickle = blosc.compress(pickled_data)
 
-            fname = TAG + " ".join([str(p)
-                                    for n, p in enumerate(pulses) if n > 3]) + ".pkl"
-            print(fname)
-            with open("../saves/" + fname, "wb") as f:
-                f.write(compressed_pickle)
+        fname = TAG + " ".join([str(p)
+                                for n, p in enumerate(pulses) if n < 3]) + ".pkl"
+        print(fname)
+        with open("../saves/" + fname, "wb") as f:
+            f.write(compressed_pickle)
 
 
 logging.basicConfig()
