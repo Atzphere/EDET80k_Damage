@@ -6,6 +6,7 @@ import blosc
 import os
 import matplotlib_animtools as ma
 import PositionVoltageConverter_Standalone as pvcs
+from collections.abc import Iterable
 
 os.chdir(os.path.dirname(__file__))
 
@@ -42,10 +43,10 @@ class Measurer(object):
 
     '''
 
-    def __init__(self, start_time, duration, measurement, tags, timestep=None):
+    def __init__(self, start_time, duration, measurement, tag, timestep=None):
         self.start_time = start_time
         self.duration = duration
-        self.measurements = measurements
+        self.measurement = measurement
         self.timestep = timestep
         self.tag = tag
 
@@ -71,11 +72,12 @@ class Measurer(object):
         if self.is_active(time):
             results = {}
             self.last_meaurement_time = time
-            for m, t in zip(self.measurementsself.tags):
-                if t not in results.keys():
-                    results.update({t: [m.measure(grid)]})
-                else:
-                    results[t].append(m.measure(grid))
+            measurement = self.measurement.measure(grid)
+            for key in measurement.keys():
+                mkey = self.tag + " " + key
+                results.update({mkey: measurement[key]})
+
+            results.update({self.tag + " " + "time": time})
 
             return results
 
@@ -97,31 +99,31 @@ class Measurement(object):
     Functions to evaluate on the MeasureArea. Basic ones are predefined as strings:
     "ALL", "MEAN", "STD", "MAX... but you can also specify arbitrary ones. 
     '''
-    default_samplers = {"ALL": lambda T, x, y: T,
+    default_samplers = {"ALL": lambda T, x, y: (T, x, y),
                         "MEAN": lambda T, x, y: np.mean(T),
                         "STD": lambda T, x, y: T.std(),
                         "MAX": lambda T, x, y: (np.max(T), x[np.where(T == np.max(T))], y[np.where(T == np.max(T))])}
 
     def __init__(self, measurearea, modes=["ALL"]):
         self.modes = modes
-        self.methods = []
+        self.methods = {}
         self.measurearea = measurearea
-        for mode in modes:
+        for n, mode in enumerate(modes):
             if mode in Measurement.default_samplers.keys():
-                self.methods.append(Measurement.default_samplers[mode])
+                self.methods.update({mode: Measurement.default_samplers[mode]})
             else:
-                self.methods.append()
+                self.methods.update({f"METHOD{n}": mode})
 
     def measure(self, state):
         '''
         state is RxR
         '''
-        measurements = []
+        measurements = {}
         temps = state[self.measurearea.mask]
         x = self.measurearea.x_pos
         y = self.measurearea.y_pos
-        for m in self.methods:
-            measurements.append(m(temps, x, y))
+        for k in self.methods.keys():
+            measurements.update({k: self.methods[k](temps, x, y)})
 
         return measurements
 
@@ -147,6 +149,7 @@ class MeasureArea(object):
         ox, oy = grid.get_offset_meshgrid(*location)
         self.mask = shapemaker(ox, oy)
         self.x_pos, self.y_pos = x[self.mask], y[self.mask]
+        self.mask = self.mask.flatten()
 
 
 class Material(object):
@@ -232,7 +235,7 @@ class Simulation(object):
     Attributes:
 
     simgrid Simgrid: the simgrid to solve the heat equations on.
-    
+
     material Material: the material to use.
 
     pulses Iterable[LaserPulse]: The sequence of laser pulses to apply to the chip.
@@ -310,14 +313,15 @@ class Simulation(object):
         grid[:, :] = self.STARTING_TEMP
 
         def _try_measurements(t):
-            for a in analyzers:
-                result = a.check_measure(t, grid[roi_mask])
-                if result is not None:
-                    for k in result.keys():
-                        if k not in recorded_data.keys():
-                            recorded_data.update({k: [result[k]]})
-                        else:
-                            recorded_data[k].append(result[k])
+            if analyzers is not None:
+                for a in analyzers:
+                    result = a.check_measure(t, grid[roi_mask])
+                    if result is not None:
+                        for k in result.keys():
+                            if k not in recorded_data.keys():
+                                recorded_data.update({k: [result[k]]})
+                            else:
+                                recorded_data[k].append(result[k])
 
         # initialize spar
         spar_coefficients = self.simgrid.innergrid_template.copy()
@@ -459,7 +463,15 @@ class Simulation(object):
 
         return self.recorded_data
 
+    def animate(self, fname=None, **kwargs):
+        if not self.evaluated:
+            return None
+        ma.animate_2d_arrays(self.recorded_data["states"], interval=(1 / (self.SAMPLE_FRAMERATE))
+                             * 1000, **kwargs)
+
     def save(self, fname=None):
+        if not self.evaluated:
+            return None
         if self.DENSE_LOGGING:
             pickled_data = pickle.dumps((dense_states, dense_deltas))
             TAG = "foobtest_"  # prefix to save the results under
