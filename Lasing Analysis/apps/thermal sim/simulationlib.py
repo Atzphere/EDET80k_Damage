@@ -176,7 +176,7 @@ class SimGrid(object):
                           are supported, only one side-length is required.
 
     RESOLUTION int: the number of subdivisions along the X-Y axis, i.e. the spatial resolution
-                    of the simulation. Computation time scales with O(N^4), so be reasonable. 
+                    of the simulation. Computation time scales with O(N^4), so be reasonable.
 
     CHIP_THICKNESS float: the thickness of the chip. used for thermal mass calculations.
 
@@ -191,6 +191,7 @@ class SimGrid(object):
     SPAR_WIDTH float: how wide the spars are.
 
     '''
+
     def __init__(self, dimension, resolution, thickness, use_spar=False, spar_thickness=0.5, spar_width=1):
         self.CHIP_DIMENSION = dimension
         self.RESOLUTION = resolution
@@ -262,6 +263,7 @@ class Simulation(object):
     radiation bool: whether or not to simulate radiation.
 
     '''
+
     def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True):
         self.simgrid = simgrid
         self.material = material
@@ -285,7 +287,7 @@ class Simulation(object):
             self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
 
         self.TIMESTEP = get_minimum_stable_timestep(
-            self.simgrid.dx, self.material.DIFFUSIVITY)  * self.TIMESTEP_MULTI
+            self.simgrid.dx, self.material.DIFFUSIVITY) * self.TIMESTEP_MULTI
 
         self.gamma = self.material.DIFFUSIVITY * \
             (self.TIMESTEP / self.simgrid.dx**2)
@@ -332,7 +334,6 @@ class Simulation(object):
 
         # applications to the ROI must be a flattened array.
         spar_coefficients = spar_coefficients.flatten()
-
 
         # neighboring cell masks for heat conduction
         left = np.roll(roi_mask, -1)
@@ -469,21 +470,19 @@ class Simulation(object):
         ma.animate_2d_arrays(self.recorded_data["states"], interval=(1 / (self.SAMPLE_FRAMERATE))
                              * 1000, **kwargs)
 
-    def save(self, fname=None):
+    def save(self, fname, auto=True):
+        '''
+        pickles the simulation object and saves it to a file.
+        '''
         if not self.evaluated:
             return None
-        if self.DENSE_LOGGING:
-            pickled_data = pickle.dumps((dense_states, dense_deltas))
-            TAG = "foobtest_"  # prefix to save the results under
+        if self.DENSE_LOGGING and auto:
+            TAG = fname  # prefix to save the results under
             TAG += "_DENSE"
-        else:
-            # returns data as a bytes object
-            pickled_data = pickle.dumps((states, deltas))
+            fname = TAG + " ".join([str(p) for n, p in enumerate(self.pulses) if n < 3]) + ".pkl"
+            pickled_data = pickle.dumps(self)
         compressed_pickle = blosc.compress(pickled_data)
 
-        fname = TAG + " ".join([str(p)
-                                for n, p in enumerate(pulses) if n < 3]) + ".pkl"
-        print(fname)
         with open("../saves/" + fname, "wb") as f:
             f.write(compressed_pickle)
         print(f"Saved simulation to /saves/{fname}.")
