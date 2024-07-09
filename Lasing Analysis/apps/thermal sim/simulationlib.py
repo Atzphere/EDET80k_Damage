@@ -114,7 +114,7 @@ class Simulation(object):
 
     edge_derivative float: The edge temperature flux if using Neumann boundary conditions. Currently only supports symmetrical BC.
 
-    sample_framerate int: How many times to capture the state of the simulation per second. Useful for animations.
+    sample_framerate int: How many times to capture the state of the simulation per second. Useful for animations. If zero, do not record states.
 
     INTENDED_PBS float: The intended playback speed of an animation of the simulation. Use in tandem with sample_framerate to record slow-mo.
 
@@ -127,9 +127,11 @@ class Simulation(object):
 
     radiation bool: whether or not to simulate radiation.
 
+    silent bool: whether or not to print anything to stdout regarding sim status
+
     '''
 
-    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True):
+    def __init__(self, simgrid, material, duration, pulses, ambient_temp, starting_temp=300, neumann_bc=True, edge_derivative=0, sample_framerate=24, intended_pbs=1, dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True, silent=True):
         self.simgrid = simgrid
         self.material = material
         self.pulses = pulses
@@ -147,6 +149,9 @@ class Simulation(object):
         self.use_radiation = radiation
         self.progress_bar = progress_bar
         self.recorded_data = {}
+        self.silent = silent
+
+        self.record_states = (sample_framerate != 0)
 
         self.cell_mass = self.simgrid.cell_area * \
             self.simgrid.CHIP_THICKNESS * self.material.DENSITY  # in g
@@ -159,8 +164,9 @@ class Simulation(object):
         self.times = np.arange(0, self.STOP_TIME, self.TIMESTEP)
 
         self.timesteps_per_second = round(1 / self.TIMESTEP)
-        self.timesteps_per_frame = round(
-            (self.timesteps_per_second * self.PLAYBACKSPEED) / (self.SAMPLE_FRAMERATE))
+
+        if self.record_states:
+            self.timesteps_per_frame = round((self.timesteps_per_second * self.PLAYBACKSPEED) / (self.SAMPLE_FRAMERATE))
 
         self.timesteps_per_percent = round(len(self.times) / 100)
 
@@ -235,22 +241,23 @@ class Simulation(object):
 
         _try_measurements(0)
 
-        if self.DENSE_LOGGING:
-            dense_states = []
-            dense_deltas = []
-            dense_deltas.append(np.zeros(np.shape(grid)))
-            dense_states.append(grid)
+        if self.record_states:
+            if self.DENSE_LOGGING:
+                dense_states = []
+                dense_deltas = []
+                dense_deltas.append(np.zeros(np.shape(grid)))
+                dense_states.append(grid)
 
-        else:
-            states = []
-            deltas = []
-            deltas.append(np.zeros(np.shape(grid)))
-            states.append(grid)
+            else:
+                states = []
+                deltas = []
+                deltas.append(np.zeros(np.shape(grid)))
+                states.append(grid)
 
-        print(
-            f"Starting simulation: {round(self.STOP_TIME / self.TIMESTEP)} iterations.")
+        if not self.silent:
+            print(f"Starting simulation: {round(self.STOP_TIME / self.TIMESTEP)} iterations.")
 
-        if self.progress_bar:
+        if self.progress_bar and not self.silent:
             print("[" + " " * 24 + "25" + " " * 23 +
                   "50" + " " * 23 + "75" + " " * 24 + "]")
             print("[", end="")
@@ -304,7 +311,7 @@ class Simulation(object):
 
             _try_measurements(t)
 
-            if n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:
+            if self.record_states and n % self.timesteps_per_frame == 0 and not self.DENSE_LOGGING:
                 deltas.append(delta.copy())
                 states.append(grid.copy())
             elif self.DENSE_LOGGING:
@@ -314,31 +321,35 @@ class Simulation(object):
             if n % self.timesteps_per_percent == 0 and self.progress_bar:
                 print("#", end="")
                 progress += 1
-        if self.progress_bar:
-            print("]")
-        print("Simulation done.")
 
-        self.evaluated = True
-        if self.DENSE_LOGGING:
-            for n, s in enumerate(dense_states):
-                dense_states[n] = s - 273.15  # convert to celsius
-            self.sim_states = dense_states
-            self.sim_deltas = dense_deltas
+        if not self.silent:
+            if self.progress_bar:
+                print("]")
+            print("Simulation done.")
 
-        else:
-            for n, s in enumerate(states):
-                states[n] = s - 273.15  # convert to celsius
-            self.sim_states = states
-            self.sim_deltas = deltas
+        if self.record_states:
+            if self.DENSE_LOGGING:
+                for n, s in enumerate(dense_states):
+                    dense_states[n] = s - 273.15  # convert to celsius
+                self.sim_states = dense_states
+                self.sim_deltas = dense_deltas
 
-        recorded_data.update({"states": self.sim_states, "deltas": self.sim_deltas})
+            else:
+                for n, s in enumerate(states):
+                    states[n] = s - 273.15  # convert to celsius
+                self.sim_states = states
+                self.sim_deltas = deltas
+
+            recorded_data.update({"states": self.sim_states, "deltas": self.sim_deltas})
+
         self.recorded_data = recorded_data
         self.evaluated = True
 
         return self.recorded_data
 
     def animate(self, fname=None, **kwargs):
-        if not self.evaluated:
+        if not self.evaluated or not self.record_states:
+            logging.error("No information to animate.")
             return None
         ma.animate_2d_arrays(self.recorded_data["states"], interval=(1 / (self.SAMPLE_FRAMERATE))
                              * 1000, **kwargs)
