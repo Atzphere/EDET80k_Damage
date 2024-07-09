@@ -1,7 +1,9 @@
 import simulationlib as sl
 import lasinglib as ll
+import measurelib as ml
 import numpy as np
 import pandas as pd
+import math
 import matplotlib.pyplot as plt
 
 SILICON = sl.Material(88, 0.09, 0.7, 0.002329002)
@@ -33,6 +35,13 @@ def make_exp_pulse(up_time, hold_time, power_rampup):
     return function
 
 
+def make_bell_curve(start_time, sigma):
+    def function(t):
+        return (1 / (sigma * math.sqrt(2 * np.pi))) * np.exp((-1 / 2) * ((t - start_time)**2 / sigma**2))
+
+    return function
+
+
 def makeRampedPulse(up_time, hold_time, down_time, power_rampup=1, power_rampdown=1):
     duration = up_time + down_time + hold_time
 
@@ -49,23 +58,28 @@ def makeRampedPulse(up_time, hold_time, down_time, power_rampup=1, power_rampdow
     return function
 
 
-CENTERPOINT = sl.MeasureArea(CHIP, CHIP.CENTERPOINT, lambda x, y: np.logical_and(x == 0, y == 0))
-CENTERMEASURE = sl.Measurement(CENTERPOINT, modes=["MEAN"])
+CENTERPOINT = ml.MeasureArea(CHIP, CHIP.CENTERPOINT, lambda x, y: np.logical_and(x == 0, y == 0))
+CENTERMEASURE = ml.Measurement(CENTERPOINT, modes=["MEAN"])
 
-RECORD_CENTER_TEMPERATURE = sl.Measurer(0, 5.5, CENTERMEASURE, "CENTER")
+RECORD_CENTER_TEMPERATURE = ml.Measurer(0, 10, CENTERMEASURE, "CENTER")
 
 measurements = [RECORD_CENTER_TEMPERATURE]
 
-a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
+a = ll.LaserPulse(CHIP, 0.5, 7, CHIP.CENTERPOINT, 2, sigma=0.3,
                   modulators=[makeRampedPulse(3, 1, 3, 4, 4)])
-b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
-                  modulators=[make_exp_pulse(3, 1, 1)])
+# b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
+#                   modulators=[make_exp_pulse(3, 1, 1)])
+
+
+# a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
+#                   modulators=[make_bell_curve(2, 1)])
+
 # a = ll.LaserStrobe(CHIP, 0.5, 3, CHIP.CENTERPOINT, 6, sigma=0.18, modulators=(lambda t: np.exp(
 #     (t - 0.5)) / 1.5,), parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
 
 # make class for list of pulses to auto sequence
 
-pulses = [a, b]
+pulses = [a]
 
 sim.pulses = pulses
 
