@@ -133,3 +133,19 @@ class MeasureArea(object):
         self.mask = shapemaker(ox, oy)
         self.x_pos, self.y_pos = x[self.mask], y[self.mask]
         self.mask = self.mask.flatten()
+
+
+class MeasurePoint(MeasureArea):
+    '''
+    A type of MeasureArea which yields a circular region around a point of interest.
+
+    Novel attributes:
+
+    radius float: the radius around the point of interest to sample. Uses the units
+                  of the simgrid. Defaults to 0 (a point).
+    '''
+    def __init__(self, grid, location, radius=0):
+        def _centered_circle(x, y):
+            return x**2 + y**2 <= radius**2
+
+        super().__init__(grid, location, shapemaker=_centered_circle)

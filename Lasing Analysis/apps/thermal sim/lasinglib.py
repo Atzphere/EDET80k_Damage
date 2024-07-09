@@ -1,4 +1,6 @@
 import numpy as np
+import measurelib as ml
+import copy
 
 DEFAULT_LASER_SIGMA = 0.08
 
@@ -37,7 +39,7 @@ class LaserPulse(object):
     params: [tuple(...)] : parameters to pass to the modulators.
     '''
 
-    def __init__(self, grid, start, duration, position, power, sigma=DEFAULT_LASER_SIGMA, modulators=None, params=None):
+    def __init__(self, grid, start, duration, position, power, sigma=DEFAULT_LASER_SIGMA, modulators=None, params=None, measure_target=False, target_r=0, target_modes=["MEAN"], measure_padding=(0, 0), measure_tag=None, measure_timestep=None, aux_measurers=[]):
         self.simgrid = grid
         self.sigma = sigma
         self.power = power
@@ -46,15 +48,38 @@ class LaserPulse(object):
         self.x, self.y = position
         self.end = start + duration
         self.modulators = modulators
+
+        self.measure_tag = measure_tag
+        if measure_tag is None:
+            self.measure_tag = f"PULSE_{start}s+{duration}s_{power}A"
+
+        self.measurers = copy.deepcopy(aux_measurers)
+
+        if aux_measurers != []:
+            for m in self.measurers:
+                m.tag = f"{self.measure_tag}_{m.tag}"
+
+        if measure_target:
+            pad_left, pad_right = measure_padding
+            measure_duration = pad_left + pad_right + duration
+            measure_start = start - pad_left
+
+            self.measure_area = ml.MeasurePoint(self.simgrid, position, radius=target_r)
+            self.beam_measurement = ml.Measurement(self.measure_area, modes=target_modes)
+            self.target_measurer = ml.Measurer(measure_start, measure_duration, self.beam_measurement, tag=self.measure_tag, timestep=measure_timestep)
+            self.measurers.append(self.target_measurer)
+
         if params is not None:
             self.params = params
         else:
             self.params = None
-
         # self.rendered_beam_profile = []
         self.beam_modulation = []
         self.beam_instructions = None
         self.rmg = self.radial_meshgrid(self.x, self.y)
+
+    def has_measurers(self):
+        return self.measurers is not None
 
     def get_offset_meshgrid(self, x, y):
         '''

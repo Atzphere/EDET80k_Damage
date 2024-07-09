@@ -164,8 +164,16 @@ class Simulation(object):
 
         self.timesteps_per_percent = round(len(self.times) / 100)
 
-    def simulate(self, analyzers=None):
+    def simulate(self, analyzers=[]):
         recorded_data = {}
+
+        # load laser pulse associated measurers
+
+        for pulse in self.pulses:
+            if pulse.has_measurers():
+                analyzers += pulse.measurers
+
+
         # initalize simulation plane
         grid = self.simgrid.grid_template.copy()
         grid[:, 0] = 0
@@ -180,7 +188,7 @@ class Simulation(object):
         grid[:, :] = self.STARTING_TEMP
 
         def _try_measurements(t):
-            if analyzers is not None:
+            if analyzers != []:
                 for a in analyzers:
                     result = a.check_measure(t, grid[roi_mask])
                     if result is not None:
