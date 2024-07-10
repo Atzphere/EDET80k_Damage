@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+
 def animate_2d_arrays(arrays, interval=200, repeat=True, cmap='viridis', repeat_delay=0, vmin=0, vmax=255):
     """
     Animates an arbitrary array of 2D arrays using plt.imshow.
@@ -13,15 +14,18 @@ def animate_2d_arrays(arrays, interval=200, repeat=True, cmap='viridis', repeat_
     - cmap: colormap to be used in imshow (default is 'viridis')
     """
     fig, ax = plt.subplots()
-    im = ax.imshow(arrays[0], cmap=cmap, interpolation="gaussian", vmin=vmin, vmax=vmax)
+    im = ax.imshow(arrays[0], cmap=cmap,
+                   interpolation="gaussian", vmin=vmin, vmax=vmax)
     fig.colorbar(im)
 
     def update(frame):
         im.set_array(arrays[frame])
         return [im]
 
-    ani = FuncAnimation(fig, update, frames=len(arrays), interval=interval, repeat=repeat, repeat_delay = repeat_delay)
+    ani = FuncAnimation(fig, update, frames=len(
+        arrays), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
     plt.show()
+
 
 def animate_1d_arrays(x, arrays, interval=200, repeat=True, repeat_delay=0):
     """
@@ -42,8 +46,10 @@ def animate_1d_arrays(x, arrays, interval=200, repeat=True, repeat_delay=0):
         im[0].set_data(x, arrays[frame])
         return [im]
 
-    ani = FuncAnimation(fig, update, frames=len(arrays), interval=interval, repeat=repeat, repeat_delay = repeat_delay)
+    ani = FuncAnimation(fig, update, frames=len(
+        arrays), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
     plt.show()
+
 
 def animate_1d_lines(x, arrays, labels, interval=200, repeat=True, repeat_delay=0):
     """
@@ -72,8 +78,10 @@ def animate_1d_lines(x, arrays, labels, interval=200, repeat=True, repeat_delay=
             line.set_data(x, arrays[i][frame])
         return lines
 
-    ani = FuncAnimation(fig, update, frames=len(arrays[0]), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
+    ani = FuncAnimation(fig, update, frames=len(
+        arrays[0]), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
     plt.show()
+
 
 # Example usage:
 if __name__ == "__main__":
@@ -82,4 +90,5 @@ if __name__ == "__main__":
     data2 = [np.random.rand(10) for _ in range(30)]
 
     # Call the function to animate the data
-    animate_1d_lines(np.linspace(0, 10, 10), [data, data2], labels=["hi", "bye"])
+    animate_1d_lines(np.linspace(0, 10, 10), [
+                     data, data2], labels=["hi", "bye"])

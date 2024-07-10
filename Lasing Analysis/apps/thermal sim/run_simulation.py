@@ -5,6 +5,10 @@ import numpy as np
 import pandas as pd
 import math
 import matplotlib.pyplot as plt
+import logging
+
+logging.basicConfig()
+logging.getLogger().setLevel(logging.WARNING)
 
 SILICON = sl.Material(88, 0.09, 0.7, 0.002329002)
 CHIP = sl.SimGrid(30, 101, 0.03, use_spar=False,

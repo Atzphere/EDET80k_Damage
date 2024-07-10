@@ -322,10 +322,8 @@ class Simulation(object):
                 print("#", end="")
                 progress += 1
 
-        if not self.silent:
-            if self.progress_bar:
-                print("]")
-            print("Simulation done.")
+        for k in recorded_data.keys():
+            recorded_data[k] = np.array(recorded_data[k])
 
         if self.record_states:
             if self.DENSE_LOGGING:
@@ -344,6 +342,11 @@ class Simulation(object):
 
         self.recorded_data = recorded_data
         self.evaluated = True
+
+        if not self.silent:
+            if self.progress_bar:
+                print("]")
+            print("Simulation done.")
 
         return self.recorded_data
 
