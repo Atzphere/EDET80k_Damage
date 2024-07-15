@@ -2,6 +2,7 @@ import numpy as np
 import measurelib as ml
 import copy
 from collections.abc import Iterable
+import coordinate_to_voltage_test as pvcs
 
 DEFAULT_LASER_SIGMA = 0.08
 
@@ -226,9 +227,30 @@ class LaserSequence(LaserPulse):
 
     def append(self, pulse, delay):
         last_pulse = self.pulses[-1]
+        self.delays.append(delay)
         copied_pulse = copy.deepcopy(pulse)
         copied_pulse.start = last_pulse.end + delay
         self.pulses.append(copied_pulse)
+
+    def write_to_cycle_code(self, file, time_interval):
+        with open(file, "w") as f:
+            for pulse, delay in zip(self.pulses, self.delays):
+                times = np.arange(0, pulse.duration, time_interval)
+                x, y = 0, 0
+                for t in times:  # t is in the domain of the pulse
+                    if isinstance(pulse, LaserStrobe):
+                        x, y = pulse.move_beam(t)
+                        print(x, y)
+                    else:
+                        x, y = pulse.x, pulse.y
+                    current = pulse.modulate_beam(t) * pulse.power
+                    x, y = pvcs.voltage_from_position(x, y)
+                    f.write(cycle_code_line(x, y, time_interval, current) + "\n")
+                f.write(cycle_code_line(x, y, delay, 0) + "\n")  # beam off and wait
+
+
+def cycle_code_line(xv, yv, hold, current):
+    return f"{xv:.3f},{yv:.3f},{hold:.3f},{current:.3f}"
 
 
 def genericpolar(omega, r, phase=0):
