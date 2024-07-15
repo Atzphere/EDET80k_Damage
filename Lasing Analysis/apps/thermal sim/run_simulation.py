@@ -36,17 +36,15 @@ RECORD_CENTER_TEMPERATURE = ml.Measurer(0, 10, CENTERMEASURE, "CENTER")
 
 measurements = [RECORD_CENTER_TEMPERATURE, RECORD_BMAXTEMP]
 
-a = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
-                  modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
+# a = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
+#                   modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
 
-bp = ll.LaserPulse(CHIP, 0.5, 0.2, CHIP.CENTERPOINT, 6, sigma=0.3)
+# bp = ll.LaserPulse(CHIP, 0.5, 0.2, CHIP.CENTERPOINT, 6, sigma=0.3)
 
-puls = []
+# puls = []
 
-for i in range(0, 100):
-    puls.append(ll.LaserPulse(CHIP, 0.5, 0.05, (random.randint(0 ,30), random.randint(0 ,30)), 6, sigma=0.3))
-
-a_l = ll.LaserSequence(puls, 0.02, 1)
+# for i in range(0, 100):
+#     puls.append(ll.LaserPulse(CHIP, 0.5, 0.05, (random.randint(0 ,30), random.randint(0 ,30)), 1.1, sigma=0.3))
 
 # b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_exp_pulse(3, 1, 1)])
@@ -55,14 +53,13 @@ a_l = ll.LaserSequence(puls, 0.02, 1)
 # a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_bell_curve(2, 1)])
 
-# a = ll.LaserStrobe(CHIP, 0.5, 3, CHIP.CENTERPOINT, 6, sigma=0.18, modulators=(lambda t: np.exp(
-#     (t - 0.5)) / 1.5,), parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
+a = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
 
-# make class for list of pulses to auto sequence
+a_l = ll.LaserSequence([a], 0.02, 1)
 
 pulses = [a_l]
 sim.pulses = pulses
-
+a_l.write_to_cycle_code("./michaeltest1.txt", 0.01)
 
 sim.simulate(measurements)
 # data = sim.recorded_data
