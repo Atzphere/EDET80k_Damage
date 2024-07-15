@@ -5,7 +5,7 @@ import pickle
 import blosc
 import os
 import matplotlib_animtools as ma
-import PositionVoltageConverter_Standalone as pvcs
+# import PositionVoltageConverter_Standalone as pvcs
 from collections.abc import Iterable
 
 os.chdir(os.path.dirname(__file__))
@@ -15,6 +15,11 @@ SBC = 5.670E-14  # stefan-boltzmann constant per square mm
 
 def get_minimum_stable_timestep(dx, a):
     return dx**2 / (4 * a)
+
+
+def ragged(lst):
+    # returns true if there's any list with unequal length to the first one
+    return not any(len(lst[0]) != len(i) for i in lst)
 
 
 class Material(object):
@@ -303,8 +308,9 @@ class Simulation(object):
             if self.pulses is not None:
                 laser_delta[:] = 0
                 for p in self.pulses:  # fire any lasing activities that should occur
-                    if p.is_active(t):
-                        laser_delta += p.run(t)
+                    ld = p.run(t)
+                    if ld is not None:
+                        laser_delta += ld
                 delta += laser_delta * (self.TIMESTEP * spar_multi) / (self.cell_mass * self.material.SPECIFIC_HEAT)
 
             grid[roi_mask] += delta
@@ -322,8 +328,31 @@ class Simulation(object):
                 print("#", end="")
                 progress += 1
 
+        # break down tuple data into individual series
+        new_data = {}
+        tuple_keys = []
+
         for k in recorded_data.keys():
-            recorded_data[k] = np.array(recorded_data[k])
+            data = recorded_data[k]
+            if isinstance(data[0], tuple):
+                tuple_keys.append(k)
+                for n in range(len(data[0])):
+                    new_data.update({f"{k} {n}": []})
+
+                for line in data:
+                    for n, item in enumerate(line):
+                        new_data[f"{k} {n}"].append(item)
+
+        recorded_data.update(new_data)
+        for tup in tuple_keys:
+            del recorded_data[tup]
+
+        for k in recorded_data.keys():
+            read = recorded_data[k]
+            if isinstance(read[0], Iterable) and not ragged(read):
+                pass
+            else:
+                recorded_data[k] = np.array(read)
 
         if self.record_states:
             if self.DENSE_LOGGING:

@@ -6,6 +6,8 @@ import pandas as pd
 import math
 import matplotlib.pyplot as plt
 import logging
+import modulators as mo
+import random
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.WARNING)
@@ -14,63 +16,38 @@ SILICON = sl.Material(88, 0.09, 0.7, 0.002329002)
 CHIP = sl.SimGrid(30, 101, 0.03, use_spar=False,
                   spar_thickness=0.5, spar_width=1)
 
-sim = sl.Simulation(CHIP, SILICON, duration=7.5, pulses=None, ambient_temp=300,
+sim = sl.Simulation(CHIP, SILICON, duration=6, pulses=None, ambient_temp=300,
                     starting_temp=300, neumann_bc=True,
                     edge_derivative=0, sample_framerate=24, intended_pbs=1,
-                    dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True)
+                    dense_logging=False, timestep_multi=1, radiation=True, progress_bar=True, silent=False)
 
 CENTER = (CHIP.CENTERPOINT)
 
 pulses = []
 
 
-def make_exp_pulse(up_time, hold_time, power_rampup):
-    duration = up_time + hold_time
-
-    def function(t):
-        if t <= up_time:
-            val = np.exp(((3 * t) / up_time) - 3) ** power_rampup
-        elif t < up_time + hold_time:
-            val = 1
-        elif t <= duration:
-            val = 0
-        return val
-
-    return function
-
-
-def make_bell_curve(start_time, sigma):
-    def function(t):
-        return (1 / (sigma * math.sqrt(2 * np.pi))) * np.exp((-1 / 2) * ((t - start_time)**2 / sigma**2))
-
-    return function
-
-
-def makeRampedPulse(up_time, hold_time, down_time, power_rampup=1, power_rampdown=1):
-    duration = up_time + down_time + hold_time
-
-    def function(t):
-        if t <= up_time:
-            val = np.sin((np.pi / (2 * up_time)) * t)**power_rampup
-        elif t < up_time + hold_time:
-            val = 1
-        elif t <= duration:
-            val = np.sin((np.pi / (2 * up_time)) *
-                         (t - (up_time + hold_time)) + np.pi / 2)**power_rampdown
-        return val
-
-    return function
-
+LEFT_EDGE = ml.MeasureArea(CHIP, (0, CHIP.center), lambda x, y: x == 0)
+BORDER_MAXTEMP = ml.Measurement(LEFT_EDGE, modes=["MAX"])
+RECORD_BMAXTEMP = ml.Measurer(0, 13, BORDER_MAXTEMP, "BORDER")
 
 CENTERPOINT = ml.MeasureArea(CHIP, CHIP.CENTERPOINT, lambda x, y: np.logical_and(x == 0, y == 0))
 CENTERMEASURE = ml.Measurement(CENTERPOINT, modes=["MEAN"])
-
 RECORD_CENTER_TEMPERATURE = ml.Measurer(0, 10, CENTERMEASURE, "CENTER")
 
-measurements = [RECORD_CENTER_TEMPERATURE]
+measurements = [RECORD_CENTER_TEMPERATURE, RECORD_BMAXTEMP]
 
-a = ll.LaserPulse(CHIP, 0.5, 7, CHIP.CENTERPOINT, 2, sigma=0.3,
-                  modulators=[makeRampedPulse(3, 1, 3, 4, 4)], measure_target=True, target_r=2, measure_timestep=0.1)
+a = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
+                  modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
+
+bp = ll.LaserPulse(CHIP, 0.5, 0.2, CHIP.CENTERPOINT, 6, sigma=0.3)
+
+puls = []
+
+for i in range(0, 100):
+    puls.append(ll.LaserPulse(CHIP, 0.5, 0.05, (random.randint(0 ,30), random.randint(0 ,30)), 6, sigma=0.3))
+
+a_l = ll.LaserSequence(puls, 0.02, 1)
+
 # b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_exp_pulse(3, 1, 1)])
 
@@ -83,17 +60,30 @@ a = ll.LaserPulse(CHIP, 0.5, 7, CHIP.CENTERPOINT, 2, sigma=0.3,
 
 # make class for list of pulses to auto sequence
 
-pulses = [a]
-
+pulses = [a_l]
 sim.pulses = pulses
 
 
 sim.simulate(measurements)
-data = sim.recorded_data
-print(data.keys())
-plt.plot(data["PULSE_0.5s+7s_2A time"], data["PULSE_0.5s+7s_2A MEAN"])
+# data = sim.recorded_data
+# print(data.keys())
+# fig, ax = plt.subplots(2)
+# fig.tight_layout()
+# ax[0].plot(data["PULSE_0.5s+1s_1A time"], data["PULSE_0.5s+1s_1A MEAN"] - 273.15, label="Center temperature")
+# ax[0].plot(data["BORDER time"], data["BORDER MAX 0"] - 273.15, label="Max temperature along edge")
+# ax[0].legend()
+# ax[0].set_xlabel("Time (s)")
+# ax[0].set_ylabel("Temperature (C)")
+
+# j = mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)
+# t = np.linspace(0, 13)
+# y = [j(x) for x in t]
+# ax[1].plot(t, y)
+# ax[1].set_ylabel("Laser power (W)")
+# ax[1].set_xlabel("Time (s)")
+
 plt.show()
-# sim.animate(repeat_delay=0, cmap="magma", vmin=0, vmax=450)
+sim.animate(repeat_delay=0, cmap="magma", vmin=0, vmax=450)
 
 # plt.plot(sim.recorded_data["CENTER time"], sim.recorded_data["CENTER MEAN"])
 # plt.show()

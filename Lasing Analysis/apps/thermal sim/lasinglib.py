@@ -1,6 +1,7 @@
 import numpy as np
 import measurelib as ml
 import copy
+from collections.abc import Iterable
 
 DEFAULT_LASER_SIGMA = 0.08
 
@@ -128,14 +129,21 @@ class LaserPulse(object):
         return self.start <= time and time <= self.end
 
     def run(self, time):
-        return (self.modulate_beam(time) * self.laser_beam(self.rmg, self.sigma, self.power)).flatten().copy()
+        if self.is_active(time):
+            return (self.modulate_beam(time) * self.laser_beam(self.rmg, self.sigma, self.power)).flatten().copy()
+        else:
+            # print(str(self), "did not fire")
+            return None
 
     def __str__(self):
         if self.modulators is not None:
             m = str(len(self.modulators)) + "MOD)"
         else:
             m = "NOMOD)"
-        return f"Pulse({self.power}A{self.duration}S" + m
+        return f"Pulse({self.power}A, {self.start} + {self.duration}S -> {self.end}" + m
+
+    def __repr__(self):
+        return str(self)
 
 
 class LaserStrobe(LaserPulse):
@@ -173,13 +181,54 @@ class LaserStrobe(LaserPulse):
                 self.fy(t, *self.py) + self.y + self.oy)
 
     def run(self, time):
-        m = self.modulate_beam(time)
-        x, y, = self.move_beam(time)
-        r = self.radial_meshgrid(x, y)
-        return (m * self.laser_beam(r, self.sigma, self.power)).flatten()
+        if self.is_active(time):
+            m = self.modulate_beam(time)
+            x, y, = self.move_beam(time)
+            r = self.radial_meshgrid(x, y)
+            return (m * self.laser_beam(r, self.sigma, self.power)).flatten()
+        else:
+            return None
 
 
-pulses = []
+class LaserSequence(LaserPulse):
+    def __init__(self, pulses, delay, start_time):
+        self.start_time = start_time
+        if isinstance(delay, Iterable):
+            if len(delay) != len(pulses):
+                raise ValueError("Supplied delay array-like must same size as pulses.")
+            else:
+                self.delays = delay
+        else:
+            self.delays = delay * np.ones(len(pulses))
+
+        self.build_sequence(pulses)
+
+    def build_sequence(self, pulses):
+        self.pulses = []
+        t = self.start_time
+        for pulse, delay in zip(pulses, self.delays):
+            p = copy.deepcopy(pulse)
+            p.start = t
+            p.end = t + p.duration
+            t += p.duration + delay
+            self.pulses.append(p)
+
+        self.measurers = []
+        for p in self.pulses:
+            if p.has_measurers:
+                self.measurers += p.measurers
+
+    def run(self, time):
+        for p in self.pulses:
+            result = p.run(time)
+            if result is not None:
+                return result
+
+    def append(self, pulse, delay):
+        last_pulse = self.pulses[-1]
+        copied_pulse = copy.deepcopy(pulse)
+        copied_pulse.start = last_pulse.end + delay
+        self.pulses.append(copied_pulse)
 
 
 def genericpolar(omega, r, phase=0):
