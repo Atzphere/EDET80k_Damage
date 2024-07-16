@@ -36,6 +36,35 @@ RECORD_CENTER_TEMPERATURE = ml.Measurer(0, 10, CENTERMEASURE, "CENTER")
 
 measurements = [RECORD_CENTER_TEMPERATURE, RECORD_BMAXTEMP]
 
+def scf(time, timestep):
+    n = int(time // timestep)
+    xpos = np.random.randint(-20, 20, n + 1)
+    ypos = np.random.randint(-20, 20, n + 1)
+    def x(t):
+        return xpos[int(t // timestep)]
+    def y(t):
+        return ypos[int(t // timestep)]
+    
+    return x, y
+
+def flick(x1, y1, x2, y2, time, timestep):
+    n = int(time // timestep)
+    xpos = np.zeros(n + 1)
+    ypos = np.zeros(n + 1)
+
+    xpos[::2] = x1
+    xpos[1::2] = x2
+
+    ypos[::2] = y1
+    ypos[1::2] = y2
+    print(xpos, ypos)
+    def x(t):
+        return xpos[int(t // timestep)]
+    def y(t):
+        return ypos[int(t // timestep)]
+    
+    return x, y
+
 # a = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
 #                   modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
 
@@ -44,7 +73,9 @@ measurements = [RECORD_CENTER_TEMPERATURE, RECORD_BMAXTEMP]
 # puls = []
 
 # for i in range(0, 100):
-#     puls.append(ll.LaserPulse(CHIP, 0.5, 0.05, (random.randint(0 ,30), random.randint(0 ,30)), 1.1, sigma=0.3))
+#     puls.append(ll.LaserPulse(CHIP, 0.5, 0.0001, (random.randint(0 ,30), random.randint(0 ,30)), 1.4, sigma=0.3))
+
+# a_l = ll.LaserSequence(puls, 0, 1)
 
 # b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_exp_pulse(3, 1, 1)])
@@ -53,15 +84,25 @@ measurements = [RECORD_CENTER_TEMPERATURE, RECORD_BMAXTEMP]
 # a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_bell_curve(2, 1)])
 
-a = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
+# a = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
 
-a_l = ll.LaserSequence([a], 0.02, 1)
+# def x(t):
+#     return t * (20 / 0.06) - 10
 
+# wiggle = lambda t: 10 * np.sin((3 * 2 * (np.pi / 0.06)) * t)
+# wiggle2 = lambda t: 10 * np.cos((3 * 2 * (np.pi / 0.06)) * t)
+# a = ll.LaserStrobe(CHIP, 0.5, 0.06, CHIP.CENTERPOINT, 1.4, sigma=0.18, parameterization=(wiggle2, wiggle), params=())
+# b = ll.LaserStrobe(CHIP, 0.5, 0.06, CHIP.CENTERPOINT, 1.4, sigma=0.18, parameterization=(x, wiggle), params=())
+
+# a_l = ll.LaserSequence([a, b], 0.25, 1)
+
+b = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1.1, sigma=0.18, parameterization=flick(-15, -15, 15, 15, 4, 0.01), params=())
+a_l = ll.LaserSequence([b], 0.25, 1)
 pulses = [a_l]
 sim.pulses = pulses
-a_l.write_to_cycle_code("./michaeltest1.txt", 0.01)
+a_l.write_to_cycle_code(r"C:\Users\ssuub\Desktop\MPSD-TAP\TAPV-2\Application\pythonFiles\DataTextFiles\michaeltest1.txt", 0.01)
 
-sim.simulate(measurements)
+# sim.simulate(measurements)
 # data = sim.recorded_data
 # print(data.keys())
 # fig, ax = plt.subplots(2)
@@ -79,8 +120,8 @@ sim.simulate(measurements)
 # ax[1].set_ylabel("Laser power (W)")
 # ax[1].set_xlabel("Time (s)")
 
-plt.show()
-sim.animate(repeat_delay=0, cmap="magma", vmin=0, vmax=450)
+# plt.show()
+# sim.animate(repeat_delay=0, cmap="magma", vmin=0, vmax=450)
 
 # plt.plot(sim.recorded_data["CENTER time"], sim.recorded_data["CENTER MEAN"])
 # plt.show()

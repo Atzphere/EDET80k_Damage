@@ -239,8 +239,7 @@ class LaserSequence(LaserPulse):
                 x, y = 0, 0
                 for t in times:  # t is in the domain of the pulse
                     if isinstance(pulse, LaserStrobe):
-                        x, y = pulse.move_beam(t)
-                        print(x, y)
+                        x, y = pulse.move_beam(t + pulse.start)
                     else:
                         x, y = pulse.x, pulse.y
                     current = pulse.modulate_beam(t) * pulse.power
