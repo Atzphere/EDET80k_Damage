@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import logging
 import modulators as mo
 import random
+import shapes
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.WARNING)
@@ -54,23 +55,6 @@ def scf(time, timestep):
     
     return x, y
 
-def flick(x1, y1, x2, y2, time, timestep):
-    n = int(time // timestep)
-    xpos = np.zeros(n + 1)
-    ypos = np.zeros(n + 1)
-
-    xpos[::2] = x1
-    xpos[1::2] = x2
-
-    ypos[::2] = y1
-    ypos[1::2] = y2
-    print(xpos, ypos)
-    def x(t):
-        return xpos[int(t // timestep)]
-    def y(t):
-        return ypos[int(t // timestep)]
-    
-    return x, y
 
 # a = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
 #                   modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
@@ -91,7 +75,7 @@ def flick(x1, y1, x2, y2, time, timestep):
 # a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_bell_curve(2, 1)])
 
-# a = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
+# a = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=shapes.genericradial((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
 
 # def x(t):
 #     return t * (20 / 0.06) - 10
@@ -103,7 +87,7 @@ def flick(x1, y1, x2, y2, time, timestep):
 
 # a_l = ll.LaserSequence([a, b], 0.25, 1)
 
-b = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1.1, sigma=0.18, parameterization=flick(-15, -15, 15, 15, 4, 0.01), params=())
+b = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1.1, sigma=0.18, parameterization=shapes.flick(-15, -15, 15, 15, 4, 0.01), params=())
 a_l = ll.LaserSequence([b], 0.25, 1)
 pulses = [a_l]
 sim.pulses = pulses
