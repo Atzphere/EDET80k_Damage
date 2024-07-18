@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-DPATH = "./gaussian profile 1 2.5A 60S 3H.csv"
+DPATH = "./gaussian profile 1 2.5A 60S.csv"
 
 data = pd.read_csv(DPATH, header=None)
 

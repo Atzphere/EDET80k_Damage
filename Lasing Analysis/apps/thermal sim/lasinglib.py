@@ -31,7 +31,7 @@ import numpy as np
 import measurelib as ml
 import copy
 from collections.abc import Iterable
-import coordinate_to_voltage_test as pvcs
+import position_voltage_converter as pvcs
 
 DEFAULT_LASER_SIGMA = 0.08
 
@@ -377,16 +377,21 @@ class LaserSequence(LaserPulse):
 
         with open(file, "w") as f:
             for pulse, delay in zip(self.pulses, self.delays):
-                times = np.arange(0, pulse.duration, time_interval)
-                x, y = 0, 0
-                for t in times:  # t is in the domain of the pulse
-                    if isinstance(pulse, LaserStrobe):
-                        x, y = pulse.move_beam(t + pulse.start)
-                    else:
-                        x, y = pulse.x, pulse.y
-                    current = pulse.modulate_beam(t) * pulse.power
-                    x, y = pvcs.voltage_from_position(x, y)
-                    f.write(cycle_code_line(x, y, time_interval, current) + "\n")
+                if pulse.modulators is not None and not isinstance(pulse, LaserPulse):
+                    x, y = pulse.x, pulse.y
+                    f.write(cycle_code_line(x, y, pulse.duration, pulse.power) + "\n")
+
+                else:
+                    times = np.arange(0, pulse.duration, time_interval)
+                    for t in times:  # t is in the domain of the pulse
+                        if isinstance(pulse, LaserStrobe):
+                            x, y = pulse.move_beam(t + pulse.start)
+                        else:
+                            x, y = pulse.x, pulse.y
+                        current = pulse.modulate_beam(t) * pulse.power
+                        x, y = pvcs.voltage_from_position(x, y)
+                        f.write(cycle_code_line(x, y, time_interval, current) + "\n")
+
                 f.write(cycle_code_line(x, y, delay, 0) + "\n")  # beam off and wait
 
 
