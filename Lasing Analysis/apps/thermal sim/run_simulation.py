@@ -57,7 +57,6 @@ def flick(x1, y1, x2, y2, time, timestep):
 
     ypos[::2] = y1
     ypos[1::2] = y2
-    print(xpos, ypos)
     def x(t):
         return xpos[int(t // timestep)]
     def y(t):
@@ -65,42 +64,45 @@ def flick(x1, y1, x2, y2, time, timestep):
     
     return x, y
 
-# a = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
-#                   modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
+doublegauss = ll.LaserPulse(CHIP, 0.5, 1, CHIP.CENTERPOINT, 1, sigma=0.3,
+                  modulators=[mo.doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)], measure_target=True, target_r=2, measure_timestep=0.01)
 
-# bp = ll.LaserPulse(CHIP, 0.5, 0.2, CHIP.CENTERPOINT, 6, sigma=0.3)
+singlepulse = ll.LaserPulse(CHIP, 0.5, 0.2, CHIP.CENTERPOINT, 6, sigma=0.3)
 
-# puls = []
+puls = []
 
-# for i in range(0, 100):
-#     puls.append(ll.LaserPulse(CHIP, 0.5, 0.0001, (random.randint(0 ,30), random.randint(0 ,30)), 1.4, sigma=0.3))
+for i in range(0, 100):
+    puls.append(ll.LaserPulse(CHIP, 0.5, 0.0001, (random.randint(0 ,30), random.randint(0 ,30)), 1.4, sigma=0.3))
 
-# a_l = ll.LaserSequence(puls, 0, 1)
+randomspam = ll.LaserSequence(puls, 0, 1)
 
-# b = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
+# exp_pulse = ll.LaserPulse(CHIP, 5.5, 4, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_exp_pulse(3, 1, 1)])
 
 
-# a = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
+# gauss_pulse = ll.LaserPulse(CHIP, 0.5, 5, CHIP.CENTERPOINT, 2, sigma=0.3,
 #                   modulators=[make_bell_curve(2, 1)])
 
-# a = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
+exponentialspiral = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1, sigma=0.18, modulators=[lambda t: 1 + (t / 4) * 0.8], parameterization=ll.genericpolar((4 * np.pi) / 3, lambda t: np.exp(t), phase=0), params=())
 
-# def x(t):
-#     return t * (20 / 0.06) - 10
+def x(t):
+    return t * (20 / 0.06) - 10
 
-# wiggle = lambda t: 10 * np.sin((3 * 2 * (np.pi / 0.06)) * t)
-# wiggle2 = lambda t: 10 * np.cos((3 * 2 * (np.pi / 0.06)) * t)
-# a = ll.LaserStrobe(CHIP, 0.5, 0.06, CHIP.CENTERPOINT, 1.4, sigma=0.18, parameterization=(wiggle2, wiggle), params=())
-# b = ll.LaserStrobe(CHIP, 0.5, 0.06, CHIP.CENTERPOINT, 1.4, sigma=0.18, parameterization=(x, wiggle), params=())
+wiggle = lambda t: 10 * np.sin((3 * 2 * (np.pi / 0.06)) * t)
+wiggle2 = lambda t: 10 * np.cos((3 * 2 * (np.pi / 0.06)) * t)
+circle = ll.LaserStrobe(CHIP, 0.5, 0.06, CHIP.CENTERPOINT, 1.4, sigma=0.18, parameterization=(wiggle2, wiggle), params=())
+sinewave = ll.LaserStrobe(CHIP, 0.5, 0.06, CHIP.CENTERPOINT, 1.4, sigma=0.18, parameterization=(x, wiggle), params=())
 
-# a_l = ll.LaserSequence([a, b], 0.25, 1)
+strobetest = ll.LaserPulse(CHIP, 0.5, 6, (18, 18), 1.1, sigma=0.18, modulators=(lambda t: 1 if round(t / 0.05) % 2 == 0 else 0,))
 
-b = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1.1, sigma=0.18, parameterization=flick(-15, -15, 15, 15, 4, 0.01), params=())
-a_l = ll.LaserSequence([b], 0.25, 1)
+a_l = ll.LaserSequence([circle, sinewave] + puls, 0.25, 1)
+a_l = ll.LaserSequence([strobetest], 0.5, 6)
+
+# b = ll.LaserStrobe(CHIP, 0.5, 4, CHIP.CENTERPOINT, 1.1, sigma=0.18, parameterization=flick(-15, -15, 15, 15, 4, 0.01), params=())
+# a_l = ll.LaserSequence([b], 0.25, 1)
 pulses = [a_l]
 sim.pulses = pulses
-a_l.write_to_cycle_code(r"C:\Users\ssuub\Desktop\MPSD-TAP\TAPV-2\Application\pythonFiles\DataTextFiles\michaeltest1.txt", 0.01)
+a_l.write_to_cycle_code(r"C:\Users\ssuub\Desktop\MPSD-TAP\TAPV-2\Application\pythonFiles\DataTextFiles\michaeltest1.txt", 0.05)
 
 # sim.simulate(measurements)
 # data = sim.recorded_data
