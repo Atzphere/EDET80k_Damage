@@ -54,7 +54,7 @@ class COMInterface(object):
         except Exception as e:
             raise COMInterfaceException("COM Query failed") from e
         return responses
-    
+
     def query_port_blocking(self, queries, **kwargs):
         return asyncio.run(self.query_port(queries, **kwargs))
 

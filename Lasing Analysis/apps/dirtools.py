@@ -1,5 +1,5 @@
 '''
-Useful directory-manipulation functions used in GaribaldiPPP.
+Useful directory-manipulation functions
 
 Functions:
 

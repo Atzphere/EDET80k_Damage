@@ -1,3 +1,5 @@
+# outdated test version of the beam profiling experiment
+
 import optris_csv as oc
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm

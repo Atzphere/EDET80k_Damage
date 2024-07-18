@@ -1,3 +1,12 @@
+'''
+Some analysis code to analyze temperature profiles vs time. Tries to estimate the stable
+regime of a lasing action and extract its beam parameters, assuming that the distribution is Gaussian.
+The hope with this is to eventually characterize the beam and its area of influence to inform what
+is needed for annealing.
+
+'''
+
+
 import pickle
 import matplotlib.pyplot as plt
 import logging

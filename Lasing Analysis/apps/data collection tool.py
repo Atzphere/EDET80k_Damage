@@ -1,3 +1,10 @@
+'''
+Somewhat streamlined script to half-manually collect beam profiles from Optris RAVI recordings.
+Set the working path you want to dump information to, run and follow the instructions given.
+
+'''
+
+
 import comport_asyncio as cs
 import time
 import glob

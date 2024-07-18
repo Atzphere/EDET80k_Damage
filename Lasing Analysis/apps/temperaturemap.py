@@ -1,3 +1,10 @@
+'''
+Maps Optris PIX Connect temperatures to approximately what their actual temperatures should be
+by way of a measured lookup table which has been fit to allow extrapolation and interpolation.
+(From the oven experiment)
+
+'''
+
 import numpy as np
 from numpy.polynomial import Polynomial
 import logging
