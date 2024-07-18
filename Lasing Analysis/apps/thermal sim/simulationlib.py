@@ -1,11 +1,35 @@
+'''
+
+This module defines the Simulation object as well as its requisite classes.
+The workflow of using the simulation goes like this:
+
+Initialize a SimGrid (the discretized spatial domain over which the thermal simulation is to be run)
+and a Material (the material to model conduction and radiation with).
+
+WIth the SimGrid, initialize a list of LaserPulses or LaserSequences (see lasinglib)
+to be carried out at some point.
+
+Initialize the Simulation object using your simgrid, material, and laser pulses.
+Key parameters of interest are the boundary/initial conditions, simulation length, and
+the duration/temporal resolution of the simulation.
+
+If desired, you can use measurelib (see file for more details) to create Measurer objects
+which can also be passed to the simulation. These objects specify arbitrary regions of the
+SimGrid to be measured, and what types of measurements to be performed (mean, max, etc.).
+
+Once you are happy with your simulation, run it with s.simulate().
+You can now access the data from the simulation with s.recorded_data, animate it with s.animate(),
+and also save the entire Simulation object as a pickle file for easy future analysis with s.save()
+
+
+'''
+
 import numpy as np
 import logging
-import matplotlib.pyplot as plt
 import pickle
 import blosc
 import os
 import matplotlib_animtools as ma
-# import PositionVoltageConverter_Standalone as pvcs
 from collections.abc import Iterable
 
 os.chdir(os.path.dirname(__file__))
@@ -103,6 +127,8 @@ class Simulation(object):
     '''
     The main simulation object. Simulations can be run by calling Simulation.simulate(measurers).
 
+    Recorded data can then be accessed via Simulation.recorded_data (dict).
+
     Attributes:
 
     simgrid Simgrid: the simgrid to solve the heat equations on.
@@ -115,7 +141,8 @@ class Simulation(object):
 
     starting_temp float: pre-heat the simgrid to this temperature
 
-    neumann_bc bool: Whether or not to use Neumann boundary conditions. If false, use Dirichet instead (edges set to ambient)
+    neumann_bc bool: Whether or not to use Neumann boundary conditions. If false, use Dirichet instead (edges set to ambient temperature).
+                     Neumann BC currently only supports a heat flux of zero across the boundary (thermally isolated aside from radiation).
 
     edge_derivative float: The edge temperature flux if using Neumann boundary conditions. Currently only supports symmetrical BC.
 
@@ -186,6 +213,7 @@ class Simulation(object):
 
 
         # initalize simulation plane
+        # grid is a (N+2) x (N+2) array. The bordering cells are used to calculate boundary conditions.
         grid = self.simgrid.grid_template.copy()
         grid[:, 0] = 0
         grid[:, self.simgrid.RESOLUTION + 1] = 0
@@ -209,14 +237,14 @@ class Simulation(object):
                             else:
                                 recorded_data[k].append(result[k])
 
-        # initialize spar
+        # initialize spar geometry
         spar_coefficients = self.simgrid.innergrid_template.copy()
         spar_coefficients[:, self.simgrid.half_grid - self.simgrid.spar_extension_cells:self.simgrid.half_grid +
                           1 + self.simgrid.spar_extension_cells] = self.simgrid.spar_multi
         spar_coefficients[self.simgrid.half_grid - self.simgrid.spar_extension_cells:self.simgrid.half_grid +
                           1 + self.simgrid.spar_extension_cells, :] = self.simgrid.spar_multi
 
-        # applications to the ROI must be a flattened array.
+        # all array operations on the ROI must be done with flattened arrays of size NxN.
         spar_coefficients = spar_coefficients.flatten()
 
         # neighboring cell masks for heat conduction
@@ -237,15 +265,17 @@ class Simulation(object):
         # Boundaries of the physical area to enforce Neumann BC
         left_boundary_inner = np.zeros(
             (self.simgrid.RESOLUTION + 2, self.simgrid.RESOLUTION + 2), dtype=bool)
+
         left_boundary_inner[1:-1, 1] = True
         bottom_boundary_inner = np.rot90(left_boundary_inner)
         right_boundary_inner = np.rot90(bottom_boundary_inner)
         top_boundary_inner = np.rot90(right_boundary_inner)
 
+        # initial condition and measurements
         grid[roi_mask] = self.STARTING_TEMP
-
         _try_measurements(0)
 
+        # initialize data logging arrays
         if self.record_states:
             if self.DENSE_LOGGING:
                 dense_states = []
@@ -262,6 +292,7 @@ class Simulation(object):
         if not self.silent:
             print(f"Starting simulation: {round(self.STOP_TIME / self.TIMESTEP)} iterations.")
 
+        # progress bar reporting
         if self.progress_bar and not self.silent:
             print("[" + " " * 24 + "25" + " " * 23 +
                   "50" + " " * 23 + "75" + " " * 24 + "]")
@@ -271,6 +302,7 @@ class Simulation(object):
         K1 = (self.material.EMISSIVITY * SBC * self.simgrid.cell_area) / \
             (self.cell_mass * self.material.SPECIFIC_HEAT) * self.TIMESTEP
 
+        # empty array to which laser energy is accumulated before adding to the grid
         laser_delta = self.simgrid.innergrid_template.copy().flatten()
         progress = 0
 
@@ -324,11 +356,14 @@ class Simulation(object):
                 dense_deltas.append(delta.copy())
                 dense_states.append(grid.copy())
 
-            if n % self.timesteps_per_percent == 0 and self.progress_bar:
+            if n % self.timesteps_per_percent == 0 and self.progress_bar and not self.silent:
                 print("#", end="")
                 progress += 1
 
-        # break down tuple data into individual series
+        # simulation iteration now ends
+
+        # process recorded data:
+        # break down tuple data (measurers reporting multiple values) into individual series in recorded_data
         new_data = {}
         tuple_keys = []
 
@@ -344,8 +379,12 @@ class Simulation(object):
                         new_data[f"{k} {n}"].append(item)
 
         recorded_data.update(new_data)
+
+        # clean up the old unexpanded tuple arrays
         for tup in tuple_keys:
             del recorded_data[tup]
+
+        # convert data series to numpy arrays if supported
 
         for k in recorded_data.keys():
             read = recorded_data[k]
@@ -353,6 +392,8 @@ class Simulation(object):
                 pass
             else:
                 recorded_data[k] = np.array(read)
+
+        # convert temperature of simulation recording for animation readability
 
         if self.record_states:
             if self.DENSE_LOGGING:
@@ -369,6 +410,7 @@ class Simulation(object):
 
             recorded_data.update({"states": self.sim_states, "deltas": self.sim_deltas})
 
+        # saved processed data to the class
         self.recorded_data = recorded_data
         self.evaluated = True
 
@@ -380,6 +422,9 @@ class Simulation(object):
         return self.recorded_data
 
     def animate(self, fname=None, **kwargs):
+        '''
+        Animates the result of the animation according to the parameters supplied earlier.
+        '''
         if not self.evaluated or not self.record_states:
             logging.error("No information to animate.")
             return None
@@ -388,7 +433,7 @@ class Simulation(object):
 
     def save(self, fname, auto=True):
         '''
-        pickles the simulation object and saves it to a file.
+        Pickles the simulation object and saves it to a file. Used for easy analysis in the future.
         '''
         if not self.evaluated:
             return None
