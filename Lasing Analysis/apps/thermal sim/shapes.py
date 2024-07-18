@@ -11,7 +11,6 @@ def flick(x1, y1, x2, y2, time, timestep):
 
     ypos[::2] = y1
     ypos[1::2] = y2
-    print(xpos, ypos)
 
     def x(t):
         return xpos[int(t // timestep)]

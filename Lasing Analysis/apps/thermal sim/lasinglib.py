@@ -33,7 +33,7 @@ import copy
 from collections.abc import Iterable
 import position_voltage_converter as pvcs
 
-DEFAULT_LASER_SIGMA = 0.08
+DEFAULT_LASER_SIGMA = 0.18
 
 
 def gaussian(r, sigma):
