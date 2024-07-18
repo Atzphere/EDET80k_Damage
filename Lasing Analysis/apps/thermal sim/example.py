@@ -22,8 +22,9 @@ logging.getLogger().setLevel(logging.WARNING)
 
 # initialize simulation grid and material
 
-SILICON = sl.Material(88, 0.09, 0.7, 0.002329002)
-CHIP = sl.SimGrid(30, 91, 0.03, use_spar=False,
+SILICON = sl.Material(diffusivity=88, emissivity=0.09,
+                      specific_heat=0.7, density=0.002329002)
+CHIP = sl.SimGrid(dimension=30, resolution=91, thickness=0.03, use_spar=False,
                   spar_thickness=0.5, spar_width=1)
 
 sim = sl.Simulation(CHIP, SILICON, duration=8, pulses=None, ambient_temp=300,
@@ -42,11 +43,12 @@ BORDER_MAXTEMP = ml.Measurement(LEFT_EDGE, modes=["MAX"])
 RECORD_BMAXTEMP = ml.Measurer(0, 13, BORDER_MAXTEMP, "BORDER")
 
 # ditto but to measure the exact centerpoint of the chip
-CENTERPOINT = ml.MeasureArea(CHIP, CHIP.CENTERPOINT, lambda x, y: np.logical_and(x == 0, y == 0))
+CENTERPOINT = ml.MeasureArea(
+    CHIP, CHIP.CENTERPOINT, lambda x, y: np.logical_and(x == 0, y == 0))
 CENTERMEASURE = ml.Measurement(CENTERPOINT, modes=["MEAN"])
 RECORD_CENTER_TEMPERATURE = ml.Measurer(0, 10, CENTERMEASURE, "CENTER")
 
-# compile measurers
+# compile measurers into one list
 measurers = [RECORD_CENTER_TEMPERATURE, RECORD_BMAXTEMP]
 
 
@@ -55,17 +57,26 @@ pulses = []
 
 CURRENT = 1.1
 
-centerpulse = ll.LaserPulse(CHIP, start=0.5, duration=5, position=CENTER, power=CURRENT, modulators=[mo.doubleSinePulse(1, 3, 1)], measure_target=True)
+# create a 5 second pulse that will ramp up with a quarter sine wave for 1 second, hold for 3 seconds, then ramp down.
+# this pulse will have a measurer bound to it to measure the maximum temperature in a 1mm circle around the target.
+centerpulse = ll.LaserPulse(CHIP, start=0.5, duration=5, position=CENTER, power=CURRENT,
+                            modulators=[mo.doubleSinePulse(1, 3, 1)], measure_target=True, target_r=1, target_modes=["MAX"])
+
+# assign this pulse to the simultion
 pulses.append(centerpulse)
 sim.pulses = pulses
 
-sim.simulate()
+# simulate is called with external (non-bound) measurers
+sim.simulate(measurers)
 print("Simulate done.")
+# this is a dictionary of datasets depending on what you measured. The previous states of the simulation are also recorded.
 data = sim.recorded_data
 print(data.keys())
 
-data_mean_temp = data[f"PULSE_0.5s+5s_1.1A MEAN"]
+# in this case, MAX generates three datasets per measure cycle: the maximum temperature, along with x, and y coordinates of the hottest point.
+# these are ordered 0, (temp), 1 (x), 2 (y).
+data_mean_temp = data["PULSE_0.5s+5s_1.1A MAX 0"]
 
-print(f"Max temp at center of pulse: {max(data_mean_temp):.2f} C")
+print(f"Max temp of pulse: {max(data_mean_temp) - 273.15:.2f} C")
 
 sim.animate(repeat_delay=0, cmap="magma", vmin=0, vmax=450)

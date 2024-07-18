@@ -70,7 +70,7 @@ class LaserPulse(object):
     params: [tuple(...)] : parameters to pass to the modulators.
 
     measure_target: bool: whether or not to measure the position of the pulse using a built-in Measurer object.
-            default false 
+            default false
 
     target_r0: float: the size of the circular region around the measure target to record. 0 corresponds to
                       just the exact center.
