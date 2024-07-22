@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Measurer(object):
     '''
     An object passed to a simulation, composed of a time interval and a set of
@@ -80,7 +81,11 @@ class Measurement(object):
 
     modes: str or Callable(NDArray) or Iterable[str, Callable(NDArray)]:
     Functions to evaluate on the MeasureArea. Basic ones are predefined as strings:
-    "ALL", "MEAN", "STD", "MAX... but you can also specify arbitrary ones. 
+    "ALL", "MEAN", "STD", "MAX... but you can also specify arbitrary ones.
+
+    For functions with multiple outputs (i.e. temperatures and their locations),
+    the simulation will create a dict entry for each array of outputs numbered as
+    measure_tag ... 0, 1, 2, etc.
     '''
     default_samplers = {"ALL": lambda T, x, y: (T, x, y),
                         "MEAN": lambda T, x, y: np.mean(T),

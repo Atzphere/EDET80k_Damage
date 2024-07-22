@@ -1,13 +1,38 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
+import cv2
+from tqdm import tqdm
 
-DPATH = "..\\data\\damage photos\\"
+DPATH = "..\\data\\shadows\\"
 
-files = ["Image-FreeModeAcquisition-01--01.png", "Image-FreeModeAcquisition-01--02.png",
-         "Image-FreeModeAcquisition-01--03.png", "Image-FreeModeAcquisition-01--04.png"]
+files = ["onehour.png"]
 
-for i in files:
-    loaded_image = np.array(Image.open(DPATH + i).convert('L'))
-    plt.imshow(255 - loaded_image, cmap='Greys', alpha=0.4)
+i = files[0]
+
+icx = 918
+icy = 1053
+
+radius = 1172 # pixels
+
+# fig, ax = plt.subplots()
+img = cv2.imread(DPATH + i)
+loaded_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# ax.imshow(255 - loaded_image, cmap='Greys')
+blur = 255 - cv2.blur(loaded_image,(25,25))
+# plt.show()
+
+coord_y, coord_x = np.indices(np.shape(blur))
+
+coord_y = coord_y - 1078
+coord_x = coord_x - 1278
+
+radii = np.sqrt(coord_y**2 + coord_x**2)
+
+intensities = []
+
+for r in tqdm(np.arange(500, radius, 1)):
+    ring = blur[np.abs(radii - r) > 1.41]
+    intensities.append(np.mean(ring))
+
+plt.plot(intensities)
 plt.show()

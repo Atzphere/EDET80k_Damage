@@ -8,27 +8,31 @@ from typing import Tuple
 logging.basicConfig()
 logging.getLogger().setLevel(logging.WARNING)
 
-DEFAULT_EOL_CHAR = b'\r' # programs such as PIX connect need this
+DEFAULT_EOL_CHAR = b'\r'  # programs such as PIX connect need this
 DEBUG = False
 
 '''
 TODO: make query handle ports that aren't actually functional
 '''
 
+
 class COMInterfaceException(Exception):
     pass
+
 
 class IncompleteResponseException(Exception):
     pass
 
+
 class NoResponseException(IncompleteResponseException):
     pass
+
 
 class QueryFailedException(Exception):
     pass
 
-class COMInterface(object):
 
+class COMInterface(object):
     def __init__(self, com_port):
         self.com_port = com_port
         self.io_lock = asyncio.Lock()
@@ -49,7 +53,7 @@ class COMInterface(object):
         try:
             async with self.io_lock:
                 responses = await query_port(self.com_port, queries, **kwargs)
-        except IncompleteResponseException as e:
+        except IncompleteResponseException:
             raise
         except Exception as e:
             raise COMInterfaceException("COM Query failed") from e
@@ -72,7 +76,7 @@ async def query_port(port, commands, tolerant=False, **kwargs):
                                   Returns false on failure if true. Use to handle faults externally
 
     kwargs passed to other functions: use_optris_workaround: use to deal with Pix Connect dropping every 3rd request.
-    
+
     returns: str or List[str]: list of responses from the serial device.
 
     '''
