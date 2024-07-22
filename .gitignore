@@ -1,6 +1,7 @@
 # data
 *.png
 *.pkl
+*.psd
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
