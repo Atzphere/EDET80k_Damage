@@ -44,7 +44,7 @@ def genericpolar(phi, r, phase=0):
     return xfunc, yfunc
 
 
-def genericradial(r, phase=0):
+def genericradial(omega, r, phase=0):
     '''
     Generates parameterizations for x(t), y(t)
     for a function with a constant angular velocity and r(t).

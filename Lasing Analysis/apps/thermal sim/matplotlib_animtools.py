@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 
-def animate_2d_arrays(arrays, interval=200, repeat=True, cmap='viridis', repeat_delay=0, vmin=0, vmax=255):
+def animate_2d_arrays(arrays, interval=200, repeat=True, cmap='viridis', repeat_delay=0, vmin=0, vmax=255, push=False):
     """
     Animates an arbitrary array of 2D arrays using plt.imshow.
 
@@ -24,10 +24,13 @@ def animate_2d_arrays(arrays, interval=200, repeat=True, cmap='viridis', repeat_
 
     ani = FuncAnimation(fig, update, frames=len(
         arrays), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
-    plt.show()
+    if push:
+        plt.show()
+    else:
+        return ani
 
 
-def animate_1d_arrays(x, arrays, interval=200, repeat=True, repeat_delay=0):
+def animate_1d_arrays(x, arrays, interval=200, repeat=True, repeat_delay=0, push=False):
     """
     Animates an arbitrary array of 1D arrays using plt.plot.
 
@@ -48,10 +51,14 @@ def animate_1d_arrays(x, arrays, interval=200, repeat=True, repeat_delay=0):
 
     ani = FuncAnimation(fig, update, frames=len(
         arrays), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
-    plt.show()
+
+    if push:
+        plt.show()
+    else:
+        return ani
 
 
-def animate_1d_lines(x, arrays, labels, interval=200, repeat=True, repeat_delay=0):
+def animate_1d_lines(x, arrays, labels, interval=200, repeat=True, repeat_delay=0, push=False):
     """
     Animates an arbitrary array of 1D arrays using plt.plot.
 
@@ -80,8 +87,10 @@ def animate_1d_lines(x, arrays, labels, interval=200, repeat=True, repeat_delay=
 
     ani = FuncAnimation(fig, update, frames=len(
         arrays[0]), interval=interval, repeat=repeat, repeat_delay=repeat_delay)
-    plt.show()
-
+    if push:
+        plt.show()
+    else:
+        return ani
 
 # Example usage:
 if __name__ == "__main__":

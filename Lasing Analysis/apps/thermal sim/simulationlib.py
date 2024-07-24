@@ -26,7 +26,7 @@ and also save the entire Simulation object as a pickle file for easy future anal
 
 import numpy as np
 import logging
-import pickle
+import dill
 import blosc
 import os
 import matplotlib_animtools as ma
@@ -304,7 +304,7 @@ class Simulation(object):
 
         # empty array to which laser energy is accumulated before adding to the grid
         laser_delta = self.simgrid.innergrid_template.copy().flatten()
-        progress = 0
+        progress = 1
 
         for n, t in enumerate(self.times):
             roi = grid[roi_mask]
@@ -428,22 +428,34 @@ class Simulation(object):
         if not self.evaluated or not self.record_states:
             logging.error("No information to animate.")
             return None
-        ma.animate_2d_arrays(self.recorded_data["states"], interval=(1 / (self.SAMPLE_FRAMERATE))
+        return ma.animate_2d_arrays(self.recorded_data["states"], interval=(1 / (self.SAMPLE_FRAMERATE))
                              * 1000, **kwargs)
 
     def save(self, fname, auto=True):
         '''
         Pickles the simulation object and saves it to a file. Used for easy analysis in the future.
+
+        Parameters:
+
+        fname str: the file path to save the simulation to.
+
+        auto bool: Whether or not to append information to the file name based on the pulses in the simulation.
         '''
         if not self.evaluated:
             return None
-        if self.DENSE_LOGGING and auto:
+        pickled_data = dill.dumps(self)
+        if auto:
             TAG = fname  # prefix to save the results under
-            TAG += "_DENSE"
+            if self.DENSE_LOGGING:
+                TAG += "_DENSE"
             fname = TAG + " ".join([str(p) for n, p in enumerate(self.pulses) if n < 3]) + ".pkl"
-            pickled_data = pickle.dumps(self)
         compressed_pickle = blosc.compress(pickled_data)
 
-        with open("../saves/" + fname, "wb") as f:
+        with open(fname, "wb") as f:
             f.write(compressed_pickle)
-        print(f"Saved simulation to /saves/{fname}.")
+        print(f"Saved simulation to {fname}.")
+
+
+def load_sim(fname):
+    with open("example_saved.dill", 'rb') as f:
+        return dill.loads(blosc.decompress(f.read()))

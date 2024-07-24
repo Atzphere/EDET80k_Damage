@@ -362,6 +362,9 @@ class LaserSequence(LaserPulse):
         self.pulses.append(copied_pulse)
         self.measurers.append(copied_pulse.measurers)
 
+    def __str__(self):
+        return f"LaserSequence({self.pulses})"
+
     def write_to_cycle_code(self, file, time_interval):
         '''
         Converts the LaserSequence to a cycle code file.
