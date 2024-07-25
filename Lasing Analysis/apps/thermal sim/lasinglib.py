@@ -217,7 +217,7 @@ class LaserPulse(object):
             m = str(len(self.modulators)) + "MOD)"
         else:
             m = "NOMOD)"
-        return f"Pulse({self.power}W, {self.start} + {self.duration}S -> {self.end}" + m
+        return f"Pulse({self.power:.3f}W, {self.start:.3f} + {self.duration:.3f}S -> {self.end:.3f}" + m
 
     def __repr__(self):
         return str(self)
@@ -323,6 +323,25 @@ class LaserSequence(LaserPulse):
             self.delays = delay * np.ones(len(pulses))
 
         self.build_sequence(pulses)
+        self.build_trace()
+
+    def build_trace(self):
+        '''
+        Generates an array of x-y positions of the component pulses/strobes for previewing
+        '''
+        self.trace_x = []
+        self.trace_y = []
+        for pulse in self.pulses:
+            if not isinstance(pulse, LaserStrobe):
+                x, y = pulse.x, pulse.y
+                self.trace_x.append(x)
+                self.trace_y.append(y)
+            else:
+                times = np.arange(0, pulse.duration, 0.1)
+                for t in times:  # t is in the domain of the pulse
+                    x, y = pulse.move_beam(t + pulse.start)
+                    self.trace_x.append(x)
+                    self.trace_y.append(y)
 
     def build_sequence(self, pulses):
         self.pulses = []
@@ -333,6 +352,8 @@ class LaserSequence(LaserPulse):
             p.end = t + p.duration
             t += p.duration + delay
             self.pulses.append(p)
+
+        self.duration = t - self.start_time
 
         self.measurers = []
         for p in self.pulses:
@@ -363,7 +384,7 @@ class LaserSequence(LaserPulse):
         self.measurers.append(copied_pulse.measurers)
 
     def __str__(self):
-        return f"LaserSequence({self.pulses})"
+        return f"LaserSequence({list([str(p) for p in self.pulses])})"
 
     def write_to_cycle_code(self, file, time_interval):
         '''
@@ -381,10 +402,13 @@ class LaserSequence(LaserPulse):
         with open(file, "w") as f:
             for pulse, delay in zip(self.pulses, self.delays):
                 if pulse.modulators is not None and not isinstance(pulse, LaserPulse):
+                    # write non-modulated binary pulses with 100% precision
                     x, y = pulse.x, pulse.y
                     f.write(cycle_code_line(x, y, pulse.duration, pulse.power) + "\n")
 
                 else:
+                    # if a pulse has some sort of continuous profile, sample it with the resolution specified by time_interval
+                    # and write individual cycle code lines per sample
                     times = np.arange(0, pulse.duration, time_interval)
                     for t in times:  # t is in the domain of the pulse
                         if isinstance(pulse, LaserStrobe):
