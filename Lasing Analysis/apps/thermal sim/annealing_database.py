@@ -121,16 +121,25 @@ class DatabaseWrapper:
 
     def write_sequence(self, seq):
         database = load_db(self.dbpath)
+        database.refresh_data()
         database.commit_data(DataEntry(seq))
 
     def visualize(self):
+        plt.gca().set_aspect('equal')
         database = load_db(self.dbpath)
+        database.refresh_data()
         fig, ax = plt.subplots()
         ax.set_xlim(-3, 35)
         ax.set_ylim(-3, 35)
+        ax.axvline(0, 0, 32, c="gray")
+        ax.axvline(32, 0, 32, c="gray")
+        ax.axhline(0, 0, 32, c="gray")
+        ax.axhline(32, 0, 32, c="gray")
         for key in database.entry_data.keys():
             entry = database.entry_data[key]
-            ax.plot(entry.sequence.trace_x, entry.sequence.trace_y)
+            label = entry.date
+            ax.plot(entry.sequence.trace_x, entry.sequence.trace_y, marker="o", alpha=0.2, lw=1, label=label)
+        ax.legend()
         plt.show()
 
 
