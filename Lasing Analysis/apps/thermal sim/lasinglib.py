@@ -337,7 +337,7 @@ class LaserSequence(LaserPulse):
                 self.trace_x.append(x)
                 self.trace_y.append(y)
             else:
-                times = np.arange(0, pulse.duration, 0.1)
+                times = np.arange(0, pulse.duration, 0.03)
                 for t in times:  # t is in the domain of the pulse
                     x, y = pulse.move_beam(t + pulse.start)
                     self.trace_x.append(x)
