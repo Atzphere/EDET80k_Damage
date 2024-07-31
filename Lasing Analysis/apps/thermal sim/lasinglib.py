@@ -165,7 +165,7 @@ class LaserPulse(object):
     def laser_beam(self, r, sigma, power):
         '''
         Returns the intensity profile of the laser, given total power output (W)
-        This gives a radial distribution.
+        This gives a radial gaussian distribution.
         '''
         return gaussian(r, sigma) * power * self.simgrid.cell_area
 
@@ -257,6 +257,20 @@ class LaserStrobe(LaserPulse):
         return (self.fx(t, *self.px) + self.x + self.ox,
                 self.fy(t, *self.py) + self.y + self.oy)
 
+    def __str__(self):
+        '''
+        String representation of the laser's properties for easy visual identification.
+        Template is:
+
+        Pulse(<power>W, <start time> -> <duration> -> <end time> + <MODulated or NOMOD>)
+
+        '''
+        if self.modulators is not None:
+            m = str(len(self.modulators)) + "MOD)"
+        else:
+            m = "NOMOD)"
+        return f"Strobe({self.power:.3f}W, {self.start:.3f} + {self.duration:.3f}S -> {self.end:.3f}" + m
+
     def run(self, time):
         '''
         With strobes, the beam is "moved" in a bit of a weird way...
@@ -312,6 +326,7 @@ class LaserSequence(LaserPulse):
     start_time: when in sim-time to begin the LaserSequence. Not used for cycle code.
 
     '''
+
     def __init__(self, pulses, delay, start_time):
         self.start_time = start_time
         if isinstance(delay, Iterable):
@@ -344,10 +359,13 @@ class LaserSequence(LaserPulse):
                     self.trace_y.append(y)
 
     def build_sequence(self, pulses):
+        '''
+        Arranges the sequence's pulses with the desired timings
+        '''
         self.pulses = []
         t = self.start_time
         for pulse, delay in zip(pulses, self.delays):
-            p = copy.deepcopy(pulse)
+            p = copy.deepcopy(pulse)  # deepcopying allows creating sequences with repetitions of the same pulse object
             p.start = t
             p.end = t + p.duration
             t += p.duration + delay
@@ -384,7 +402,11 @@ class LaserSequence(LaserPulse):
         self.measurers.append(copied_pulse.measurers)
 
     def __str__(self):
-        return f"LaserSequence({list([str(p) for p in self.pulses])})"
+        if len(self.pulses) > 6:
+            string_list = list([str(p) for n, p in enumerate(self.pulses) if n <= 6]) + [f"and {len(self.pulses) - 6} additional pulse(s)."]
+            return f"LaserSequence({string_list})"
+        else:
+            return f"LaserSequence({list([str(p) for p in self.pulses])})"
 
     def write_to_cycle_code(self, file, time_interval):
         '''
@@ -401,9 +423,10 @@ class LaserSequence(LaserPulse):
 
         with open(file, "w") as f:
             for pulse, delay in zip(self.pulses, self.delays):
-                if pulse.modulators is not None and not isinstance(pulse, LaserPulse):
+                if pulse.modulators is None and isinstance(pulse, LaserPulse):
                     # write non-modulated binary pulses with 100% precision
                     x, y = pulse.x, pulse.y
+                    x, y = pvcs.voltage_from_position(x, y)
                     f.write(cycle_code_line(x, y, pulse.duration, pulse.power) + "\n")
 
                 else:
