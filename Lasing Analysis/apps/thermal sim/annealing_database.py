@@ -30,12 +30,13 @@ class ChipRecord(object):
         with open(csvpath, "w") as f:
             f.write(",".join(cols))
 
+        # use this to detect file updates to the csv file
         self.last_hash = "NONE"
         self.save()
 
     def save(self):
         '''
-        Save this object to a dill file.
+        Save this object to a dill file. Should only be called once on initalization.
         '''
         pickled_data = dill.dumps(self)
         fname = self.dpath
@@ -46,6 +47,31 @@ class ChipRecord(object):
 
 
 class DataEntry(object):
+    '''
+    A class representing an laser sequence which has been deployed as an annealing cycle.
+    DataEntry are stored in a ChipRecord.
+    Stores the serialized laser sequence as well as some human-useful information
+    (date of creation, number of pulses, max current etc.) bound to a unique identifying ID hash.
+
+    Attributes:
+
+    date datetime.datetime: the date the DataEntry was created on
+
+    ID str: the unique indentifying hash of a DataEntry instance.
+            Created on initalization by hashing the string representation of a lasersequence salted with the current time and date.
+
+    sequence LaserSequence: the LaserSequence object to be recorded.
+
+    num_pulses int: auto-assigned human-readabe reprsenting the total number of individual subpulses
+    containe in the sequence
+
+    max_current, max_duration float: the same as num_pulses, but for the maximum current and duration of
+    any pulse in the sequence. These two are more useful for identifying anealing patterns which consist of
+    moving the same base pulse around.
+
+    notes str: human-provided notes to attach to the entry. Although the option is presented here, this is better done
+    in the csv file.
+    '''
     def __init__(self, sequence, notes=None):
         self.date = datetime.datetime.now()
         sequence_string = str(sequence) + str(self.date)
@@ -64,31 +90,46 @@ class DataEntry(object):
             self.notes = ""
 
     def __repr__(self):
+        '''
+        Custom string alignment for easy indentification via print statements
+        '''
         datestr = self.date.strftime("%m/%d/%Y, %H:%M:%S")
         return f"{datestr}\nAnnealing cycle: {str(self.sequence)}"
 
     def csv_line(self):
+        '''
+        Returns a csv-line representation of the stored lasersequence.
+        '''
         return [str(thing) for thing in [self.ID, self.date, self.num_pulses, self.max_current, self.max_duration, self.total_duration, self.notes]]
 
 
-class DatabaseWrapper:
-    '''
-    Wrapper class to modularize interactions with a ChipRecord objects/files.
-    '''
+    class DatabaseWrapper:
+        '''
+        Wrapper class to modularize interactions with a ChipRecord objects/files.
+        '''
 
-    def __init__(self, dbpath):
+        def __init__(self, dbpath):
         self.dbpath = dbpath
 
     def write_sequence(self, seq):
+        '''
+        Writes a new row of data to the ChipRecord
+        '''
         database = self.load_data()
         refresh_data(database)
         commit_data(database, DataEntry(seq))
 
     def load_data(self):
+        '''
+        Exposes the ChipRecord's data for read/write.
+        '''
         record = load_db(self.dbpath)
         return refresh_data(record)
 
     def visualize(self):
+        '''
+        Plot all prior recorded annealing sequences
+        '''
         database = self.load_data()
         refresh_data(database)
         fig , ax = plt.subplots()
@@ -108,6 +149,11 @@ class DatabaseWrapper:
         plt.show()
 
     def backup(self):
+        '''
+        Back up the current annealing history. When called, this method
+        will return the name of the backup created in the event it needs to be
+        modified.
+        '''
         date = datetime.datetime.now()
         datestr = date.strftime("%m/%d/%Y, %H:%M:%S")
         backup_str = f"Backup: {datestr}"
@@ -117,6 +163,11 @@ class DatabaseWrapper:
         return backup_str
 
     def load_backup(self, key):
+        '''
+        Attempts to load a backup of the annealing history by name.
+        This does not save the current annealing data, so be sure to backup() that
+        first if you would like to not lose it.
+        '''
         database = self.load_data()
         try:
             loaded_backup = database.backups[key]
@@ -229,3 +280,18 @@ def save(db):
 def load_db(fname):
     with open(fname, 'rb') as f:
         return dill.loads(blosc.decompress(f.read()))
+
+
+def record_exists(dpath):
+    try:
+        with open(fname, 'rb') as f:
+            loaded = dill.loads(blosc.decompress(f.read()))
+            return isinstance(loaded, ChipRecord)
+    except FileNotFoundError:
+        return False
+
+
+def new_chiprecord(name, dpath, csvpath, overwrite=False):
+    if overwrite or not record_exists(dpath):
+        record = ChipRecord(name, dpath, csvpath)
+
