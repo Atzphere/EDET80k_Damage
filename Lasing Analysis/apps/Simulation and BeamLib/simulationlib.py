@@ -455,6 +455,7 @@ class Simulation(object):
             f.write(compressed_pickle)
         print(f"Saved simulation to {fname}.")
 
+
 def load_sim(fname):
     with open(fname, 'rb') as f:
         return dill.loads(blosc.decompress(f.read()))
