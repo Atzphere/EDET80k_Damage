@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 
-AlASB = temperaturemap.maps["Al"]
+AlASB = temperaturemap.maps["TiW"]
 print(AlASB.true_temperature(27.6))
 IMDIMS = (382, 288)
 CHIP_BOTTOMLEFT = (151, 274)
@@ -32,6 +32,5 @@ ax[0].scatter(*CHIP_BOTTOMLEFT, s=2)
 # cx = coords_x[~np.logical_and(coords_x >= CHIP_BOTTOMLEFT[0], coords_x <= CHIP_TOPRIGHT[0])]
 # print(cy)
 converted_im[109:275,151:316] = AlASB.true_temperature(converted_im[109:275,151:316])
-print('e')
 ax[1].imshow(converted_im, cmap="magma", vmin=mintemp, vmax=maxtemp)
 plt.show()

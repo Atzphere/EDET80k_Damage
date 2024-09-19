@@ -1,10 +1,3 @@
-'''
-Maps Optris PIX Connect temperatures to approximately what their actual temperatures should be
-by way of a measured lookup table which has been fit to allow extrapolation and interpolation.
-(From the oven experiment)
-
-'''
-
 import numpy as np
 from numpy.polynomial import Polynomial
 import logging
@@ -12,8 +5,8 @@ import logging
 # params TIW: [ 0.00811139  1.55514877 -7.81134315] (sourced from trial 3 TIW)
 
 # new more aggresive params:
-# Al: 96.11255917847384 + 62.828229345468024 x**1 + 19.41722487874088 x**2 + 16.942386483923265 x**3 + 0.02032699973941539 x**4
-# TiW: 110.71764209748983 + 70.96583153393094 x**1 + 16.834046604352924 x**2 + 19.116681518463814 x**3 - 5.2992595623406435 x**4
+# TiW: 109.97375249530333 + 71.23636313978952 x**1 + 16.011679663543163 x**2 + 17.63904545775844 x**3 - 3.6155737011062103 x**4
+# Al: 95.77908922235851 + 64.04110673158722 x**1 + 19.923303870421066 x**2 + 14.281999148143642 x**3 - 0.3250204326056052 x**4
 
 
 XI400_UNCERTAINTY = 0.02  # 2% works past 100C
@@ -42,7 +35,7 @@ class TemperatureCalibration:
         lowerbound, upperbound = self.domain
         unstable_value = (T_observed < lowerbound) | (T_observed > upperbound)
         if self.domain is not None and np.any(unstable_value):
-            logging.warning(f"Temperature(s) {T_observed} is beyond nominal temperature mapping range.")
+            logging.warning(f"Temperature(s) {T_observed[unstable_value]} is beyond nominal temperature mapping range.")
         T_converted = self.model_func(T_observed, *self.params)
         if uncertainty is None and not auto_uncertainty:
             return T_converted
@@ -50,6 +43,11 @@ class TemperatureCalibration:
             return T_converted, self.model_func_derivative(T_observed, *self.params) * get_base_uncertainties(T_observed)
         else:  # return value and propagated uncertainty
             return T_converted, self.model_func_derivative(T_observed, *self.params) * uncertainty
+
+
+class BlackBodyTC():
+    def true_temperature(self, T, *args):
+        return T
 
 
 class TemperatureCalibrationInvertible(TemperatureCalibration):
@@ -83,20 +81,21 @@ temperature_TiW_old = TemperatureCalibrationInvertible(
 temperature_Al_old = TemperatureCalibrationInvertible(
     (quad_temp_model, quad_temp_derivative, (0.04641396, -0.84202717, 34.0740448)), (0, 300), inverse_quad_temp)
 
-Al_model = Polynomial([96.11255917847384, 62.828229345468024,
-                       19.41722487874088, 16.942386483923265, 0.02032699973941539], domain=(24.4, 59.4))
-TiW_model = Polynomial([110.71764209748983, 70.96583153393094,
-                        16.834046604352924, 19.116681518463814, -5.2992595623406435], domain=(24.5, 76.7))
+TiW_model = Polynomial([109.97375249530333, 71.23636313978952, 16.011679663543163, 17.63904545775844, -3.6155737011062103], domain=(24.05, 76.07))
+Al_model = Polynomial([95.77908922235851, 64.04110673158722, 19.923303870421066, 14.281999148143642, -0.3250204326056052], domain=(24.04, 59.04))
 
-temperature_TiW = TemperatureCalibrationPolyomial(TiW_model, domain=(24, 100))
-temperature_Al = TemperatureCalibrationPolyomial(Al_model, domain=(24, 75))
+
+blackbody = BlackBodyTC()
+
+temperature_TiW = TemperatureCalibrationPolyomial(TiW_model, domain=(24.05, 76.07))
+temperature_Al = TemperatureCalibrationPolyomial(Al_model, domain=(24.04, 59.04))
 
 
 maps = {"TiW_alt": temperature_TiW_old, "Al_alt": temperature_Al_old,
-        "TiW": temperature_TiW, "Al": temperature_Al}
+        "TiW": temperature_TiW, "Al": temperature_Al,
+        "Blackbody": blackbody}
 
 if __name__ == "__main__":
-    # import matplotlib.pyplot as plt
-    # plt.plot(np.linspace(0, 100), maps["TiW"].true_temperature(np.linspace(24, 100)))
-    # plt.show()
-    print(maps["Al"].true_temperature(25))
+    import matplotlib.pyplot as plt
+    plt.plot(np.linspace(24, 100), maps["Al"].true_temperature(np.linspace(24, 100)))
+    plt.show()
