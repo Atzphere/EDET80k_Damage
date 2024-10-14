@@ -32,6 +32,7 @@ import measurelib as ml
 import copy
 from collections.abc import Iterable
 import position_voltage_converter as pvcs
+from scipy.special import erf
 
 DEFAULT_LASER_SIGMA = 0.18
 
@@ -162,12 +163,15 @@ class LaserPulse(object):
 
         return r
 
-    def laser_beam(self, r, sigma, power):
+    def laser_beam(self, r, sigma, power, linear=True):
         '''
         Returns the intensity profile of the laser, given total power output (W)
         This gives a radial gaussian distribution.
         '''
-        return gaussian(r, sigma) * power * self.simgrid.cell_area
+        if linear:
+            return gaussian(r, sigma) * power * self.simgrid.cell_area
+        else:
+            
 
     def modulate_beam(self, time):
         '''

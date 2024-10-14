@@ -203,6 +203,12 @@ class Simulation(object):
         self.timesteps_per_percent = round(len(self.times) / 100)
 
     def simulate(self, analyzers=[]):
+        '''
+        Executes the simulation with any specified Measurer objects.
+
+        Returns a dictionary of results with keys correponding to
+        Measurer tags,
+        '''
         recorded_data = {}
 
         # load laser pulse associated measurers
