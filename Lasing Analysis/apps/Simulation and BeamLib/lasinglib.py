@@ -37,12 +37,34 @@ from scipy.special import erf
 DEFAULT_LASER_SIGMA = 0.18
 
 
-def gaussian(r, sigma):
+def gaussian(x, y, sigma, dx=None, dy=None):
     '''
     Returns a gaussian profile with its integral over R^2 normalized to identity.
     '''
-    return (1 / (2 * np.pi * sigma**2)) * np.exp((-1 / 2) * (r**2 / sigma**2))
+    if dx is None:
+        dx = np.diff(x)[0]
+    if dy is None:
+        dy = np.diff(y.T)[0]
 
+    r = np.sqrt(x**2 + y**2)
+
+    return (1 / (2 * np.pi * sigma**2)) * np.exp((-1 / 2) * (r**2 / sigma**2)) * cell_area
+
+def gaussian_noalias(x, y, sigma, dx=None, dy=None):
+
+    if dx is None:
+        dx = np.mean(np.diff(x))
+    if dy is None:
+        dy = np.mean(np.diff(y.T))
+
+    x_min = x - dx / 2
+    x_max = x + dx / 2
+    y_min = y - dy / 2
+    y_max = y + dy / 2
+
+    return 0.25  * \
+    (erf(x_max / (sigma * np.sqrt(2))) - erf(x_min / (sigma * np.sqrt(2)))) * \
+    (erf(y_max / (sigma * np.sqrt(2))) - erf(y_min / (sigma * np.sqrt(2))))
 
 class LaserPulse(object):
     '''
@@ -132,7 +154,11 @@ class LaserPulse(object):
         # framework for generating the applied beam
         self.beam_modulation = []
         self.beam_instructions = None
-        self.rmg = self.radial_meshgrid(self.x, self.y)
+        self.omg = self.get_offset_meshgrid(self.x, self.y)
+
+        self.static_beam = self.modulators is None
+
+        self.beam = self.laser_beam(position, sigma, power).flatten()
 
     def has_measurers(self):
         '''
@@ -153,24 +179,13 @@ class LaserPulse(object):
 
         return np.meshgrid(bx, by)
 
-    def radial_meshgrid(self, x, y):
-        '''
-        Returns meshgrid of radius values which can be passed to a distribution
-        function to build a radial intensity distribution (namely gaussian)
-        '''
-        xm, ym = self.get_offset_meshgrid(x, y)
-        r = np.sqrt(xm**2 + ym**2)
-
-        return r
-
-    def laser_beam(self, r, sigma, power, linear=True):
+    def laser_beam(self, pos, sigma, power):
         '''
         Returns the intensity profile of the laser, given total power output (W)
         This gives a radial gaussian distribution.
         '''
-        if linear:
-            return gaussian(r, sigma) * power * self.simgrid.cell_area
-        else:
+
+        return gaussian_noalias(*self.omg, sigma) * power
             
 
     def modulate_beam(self, time):
@@ -182,7 +197,7 @@ class LaserPulse(object):
         coeff = 1
 
         # the coefficient is the multiplicative sum of all the supplied modulators
-        if self.modulators is not None:
+        if not self.static_beam:
             if self.params is not None:
                 for m, p in zip(self.modulators, self.params):
                     coeff *= m(t, *p)
@@ -207,7 +222,7 @@ class LaserPulse(object):
 
         '''
         if self.is_active(time):
-            return (self.modulate_beam(time) * self.laser_beam(self.rmg, self.sigma, self.power)).flatten().copy()
+            return (self.modulate_beam(time) * self.beam)
 
     def __str__(self):
         '''
@@ -217,7 +232,7 @@ class LaserPulse(object):
         Pulse(<power>W, <start time> -> <duration> -> <end time> + <MODulated or NOMOD>)
 
         '''
-        if self.modulators is not None:
+        if self.static_beam:
             m = str(len(self.modulators)) + "MOD)"
         else:
             m = "NOMOD)"
@@ -256,6 +271,8 @@ class LaserStrobe(LaserPulse):
         else:
             self.ox, self.oy = 0, 0
 
+        
+
     def move_beam(self, time):
         t = time - self.start
         return (self.fx(t, *self.px) + self.x + self.ox,
@@ -269,7 +286,7 @@ class LaserStrobe(LaserPulse):
         Pulse(<power>W, <start time> -> <duration> -> <end time> + <MODulated or NOMOD>)
 
         '''
-        if self.modulators is not None:
+        if self.static_beam:
             m = str(len(self.modulators)) + "MOD)"
         else:
             m = "NOMOD)"
@@ -302,13 +319,16 @@ class LaserStrobe(LaserPulse):
         This could hypothetically be fixed by integrating the intensity distribution over each spatial cell,
         but this would be very slow, and another option is to simply use a higher spatial resolution. 
 
+        This has now been fixed by using an erf-based antiderivative to integrate through cells.
+
         '''
 
         if self.is_active(time):
             m = self.modulate_beam(time)
             x, y, = self.move_beam(time)
-            r = self.radial_meshgrid(x, y)
-            return (m * self.laser_beam(r, self.sigma, self.power)).flatten()
+            self.omg = self.get_offset_meshgrid(x, y)
+            self.beam = self.laser_beam(self.omg, self.sigma, self.power)
+            return (m * self.beam).flatten()
         else:
             return None
 

@@ -1,6 +1,9 @@
 import numpy as np
 from numpy.polynomial import Polynomial
 import logging
+
+VERSION = 3.1
+
 # params AI: 0.04641396 -0.84202717 34.0740448 (sourced from trial 1 Al)
 # params TIW: [ 0.00811139  1.55514877 -7.81134315] (sourced from trial 3 TIW)
 
@@ -59,12 +62,15 @@ class TemperatureCalibrationInvertible(TemperatureCalibration):
         return self.inverter(T_converted, *self.params)
 
 
-class TemperatureCalibrationPolyomial(TemperatureCalibration):
+class TemperatureCalibrationPolynomial(TemperatureCalibration):
     def __init__(self, poly, domain):
         self.model_func = poly
         self.domain = domain
         self.params = ()
         self.model_func_derivative = poly.deriv()
+
+    def propagate_error(self, xval, sigma):
+        return self.model_func_derivative(xval) * sigma
 
 
 def get_base_uncertainties(data):
@@ -83,19 +89,20 @@ temperature_Al_old = TemperatureCalibrationInvertible(
 
 TiW_model = Polynomial([109.97375249530333, 71.23636313978952, 16.011679663543163, 17.63904545775844, -3.6155737011062103], domain=(24.05, 76.07))
 Al_model = Polynomial([95.77908922235851, 64.04110673158722, 19.923303870421066, 14.281999148143642, -0.3250204326056052], domain=(24.04, 59.04))
-
+SiBright_model = Polynomial([-55.17754259211661, 3.391320428386963, - 0.013514628212142702])
 
 blackbody = BlackBodyTC()
 
-temperature_TiW = TemperatureCalibrationPolyomial(TiW_model, domain=(24.05, 76.07))
-temperature_Al = TemperatureCalibrationPolyomial(Al_model, domain=(24.04, 59.04))
-
+temperature_TiW = TemperatureCalibrationPolynomial(TiW_model, domain=(24.05, 76.07))
+temperature_Al = TemperatureCalibrationPolynomial(Al_model, domain=(24.04, 59.04))
+temperature_SiBright = TemperatureCalibrationPolynomial(SiBright_model, domain=(25.573, 43.376))
 
 maps = {"TiW_alt": temperature_TiW_old, "Al_alt": temperature_Al_old,
         "TiW": temperature_TiW, "Al": temperature_Al,
-        "Blackbody": blackbody}
+        "Blackbody": blackbody,
+        "Si_Bright": temperature_SiBright}
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    plt.plot(np.linspace(24, 100), maps["Al"].true_temperature(np.linspace(24, 100)))
+    plt.plot(np.linspace(24, 100), maps["Si_Bright"].true_temperature(np.linspace(24, 100)))
     plt.show()
