@@ -31,11 +31,9 @@ import numpy as np
 import measurelib as ml
 import copy
 from collections.abc import Iterable
-<<<<<<< HEAD
-=======
+
 import position_voltage_converter as pvcs
 from scipy.special import erf
->>>>>>> 1ae8ab0be2d808a4f94f1d92010d79921a58fea2
 
 import position_voltage_converter as pvcs
 import powerconverter as pconv

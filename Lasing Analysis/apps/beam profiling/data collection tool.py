@@ -22,8 +22,7 @@ os.chdir(r"C:\Users\ssuub\Desktop\Damage analysis\EDET80k_Damage\Lasing Analysis
 
 done = False
 optris_connection = cs.COMInterface("COM4")
-
-DPATH = "../data/2.5A 1S Current modulation/"
+DPATH = "../data/0.5S Paper beam profiling/"
 OUTPUT_PATH = "processed/"
 
 
