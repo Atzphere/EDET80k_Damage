@@ -28,7 +28,7 @@ class ChipRecord(object):
         cols = ["PulseID", "Date", "Number of Pulses",
                 "Max Current", "Pulse Max Duration", "Pulse Total Duration", "Notes"]
         with open(csvpath, "w") as f:
-            f.write(",".join(cols))
+            f.write(";".join(cols))
 
         # use this to detect file updates to the csv file
         self.last_hash = "NONE"
@@ -94,7 +94,10 @@ class DataEntry(object):
         Custom string alignment for easy indentification via print statements
         '''
         datestr = self.date.strftime("%m/%d/%Y, %H:%M:%S")
-        return f"{datestr}\nAnnealing cycle: {str(self.sequence)}"
+        if self.notes != "":
+            return f"{datestr}\nAnnealing cycle: {self.notes}"
+        else:
+            return f"{datestr}\nAnnealing cycle: {str(self.sequence)}"
 
     def csv_line(self):
         '''
@@ -103,21 +106,21 @@ class DataEntry(object):
         return [str(thing) for thing in [self.ID, self.date, self.num_pulses, self.max_current, self.max_duration, self.total_duration, self.notes]]
 
 
-    class DatabaseWrapper:
-        '''
-        Wrapper class to modularize interactions with a ChipRecord objects/files.
-        '''
+class DatabaseWrapper:
+    '''
+    Wrapper class to modularize interactions with a ChipRecord objects/files.
+    '''
 
-        def __init__(self, dbpath):
+    def __init__(self, dbpath):
         self.dbpath = dbpath
 
-    def write_sequence(self, seq):
+    def write_sequence(self, seq, notes=None):
         '''
         Writes a new row of data to the ChipRecord
         '''
         database = self.load_data()
         refresh_data(database)
-        commit_data(database, DataEntry(seq))
+        commit_data(database, DataEntry(seq, notes=notes))
 
     def load_data(self):
         '''
@@ -144,11 +147,11 @@ class DataEntry(object):
             entry = database.entry_data[key]
             label = entry.date.strftime("%m/%d/%Y, %H:%M:%S")
             ax.plot(entry.sequence.trace_x, entry.sequence.trace_y,
-                    marker="o", alpha=0.2, lw=1, label=label)
+                    marker="o", alpha=0.1, lw=1, label=label)
         ax.legend()
         plt.show()
 
-    def backup(self):
+    def backup(self, note=""):
         '''
         Back up the current annealing history. When called, this method
         will return the name of the backup created in the event it needs to be
@@ -156,7 +159,7 @@ class DataEntry(object):
         '''
         date = datetime.datetime.now()
         datestr = date.strftime("%m/%d/%Y, %H:%M:%S")
-        backup_str = f"Backup: {datestr}"
+        backup_str = f"Backup: {datestr}: {note}"
         database = self.load_data()
         database.backups.update({backup_str: copy.deepcopy(database.entry_data)})
         save(database)
@@ -193,7 +196,7 @@ def refresh_csv(db):
     Rebuilds a database's csv file, preserving notes and culling excess pulses not found in the ChipRecord.
     This should only be run in the case of restoring backups.
     '''
-    data = pd.read_csv(db.csvpath)
+    data = pd.read_csv(db.csvpath, sep=';')
     ID_list = data["PulseID"]
     unknown_IDs = []
     for ID in ID_list:
@@ -218,7 +221,7 @@ def refresh_data(db):
     '''
 
     if csv_modified(db):
-        data = pd.read_csv(db.csvpath)
+        data = pd.read_csv(db.csvpath, sep=';')
         ID_list = data["PulseID"]
         removed_IDs = []
         for ID in db.entry_data.keys():
@@ -257,7 +260,7 @@ def commit_data(db, entry):
 
 def write_to_csv(db, entry):
     with open(db.csvpath, "a") as f:
-        f.write("\n" + ",".join(entry.csv_line()))
+        f.write("\n" + ";".join(entry.csv_line()))
 
 
 def get_csvhash(db):
