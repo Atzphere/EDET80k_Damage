@@ -31,9 +31,11 @@ import numpy as np
 import measurelib as ml
 import copy
 from collections.abc import Iterable
-import position_voltage_converter as pvcs
 
-DEFAULT_LASER_SIGMA = 0.18
+import position_voltage_converter as pvcs
+import powerconverter as pconv
+
+DEFAULT_LASER_SIGMA = 3
 
 
 def gaussian(r, sigma):
@@ -408,7 +410,7 @@ class LaserSequence(LaserPulse):
         else:
             return f"LaserSequence({list([str(p) for p in self.pulses])})"
 
-    def write_to_cycle_code(self, file, time_interval):
+    def write_to_cycle_code(self, file, time_interval, xshift=0, yshift=0):
         '''
         Converts the LaserSequence to a cycle code file.
         Does not require a simulation to be run.
@@ -426,8 +428,11 @@ class LaserSequence(LaserPulse):
                 if pulse.modulators is None and isinstance(pulse, LaserPulse):
                     # write non-modulated binary pulses with 100% precision
                     x, y = pulse.x, pulse.y
-                    x, y = pvcs.voltage_from_position(x, y)
-                    f.write(cycle_code_line(x, y, pulse.duration, pulse.power) + "\n")
+                    x += xshift; y += yshift  # shift incase coordinate system is offset from calibration...
+                    # print(x, y)
+                    xv, yv = pvcs.voltage_from_position(x, y)
+                    current = pconv.power_to_current(pulse.power)
+                    f.write(cycle_code_line(xv, yv, pulse.duration, current) + "\n")
 
                 else:
                     # if a pulse has some sort of continuous profile, sample it with the resolution specified by time_interval
@@ -438,11 +443,13 @@ class LaserSequence(LaserPulse):
                             x, y = pulse.move_beam(t + pulse.start)
                         else:
                             x, y = pulse.x, pulse.y
-                        current = pulse.modulate_beam(t) * pulse.power
-                        x, y = pvcs.voltage_from_position(x, y)
-                        f.write(cycle_code_line(x, y, time_interval, current) + "\n")
+                        x += xshift; y += yshift
+                        # convert from amps to watts
+                        current = pconv.power_to_current(pulse.modulate_beam(t) * pulse.power)
+                        xv, yv = pvcs.voltage_from_position(x, y)
+                        f.write(cycle_code_line(xv, yv, time_interval, current) + "\n")
 
-                f.write(cycle_code_line(x, y, delay, 0) + "\n")  # beam off and wait
+                f.write(cycle_code_line(xv, yv, delay, 0) + "\n")  # beam off and wait
 
 
 def cycle_code_line(xv, yv, hold, current):
