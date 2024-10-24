@@ -236,7 +236,7 @@ class LaserPulse(object):
         Pulse(<power>W, <start time> -> <duration> -> <end time> + <MODulated or NOMOD>)
 
         '''
-        if self.static_beam:
+        if self.modulators is not None:
             m = str(len(self.modulators)) + "MOD)"
         else:
             m = "NOMOD)"
@@ -290,7 +290,7 @@ class LaserStrobe(LaserPulse):
         Pulse(<power>W, <start time> -> <duration> -> <end time> + <MODulated or NOMOD>)
 
         '''
-        if self.static_beam:
+        if not self.static_beam:
             m = str(len(self.modulators)) + "MOD)"
         else:
             m = "NOMOD)"
