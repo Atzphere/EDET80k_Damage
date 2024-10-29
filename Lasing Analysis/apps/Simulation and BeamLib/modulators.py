@@ -70,6 +70,16 @@ def doubleGaussianRamp(I0, hold_time, sigma, cutoff=3, boost=0,):
 
     return function
 
+def double_exp(a, b):
+    def function(t):
+        cutoff_time = np.log(2) / a
+        if t < cutoff_time:
+            output = np.exp(a * t) - 1
+        else:
+            output = np.exp(-b * (t - cutoff_time))
+        return output
+    return function
+        
 
 if __name__ == "__main__":
     j = doubleGaussianRamp(2.5, 4, 2, cutoff=2, boost=0)

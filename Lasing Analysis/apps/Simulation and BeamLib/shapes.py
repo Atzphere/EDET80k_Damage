@@ -81,4 +81,4 @@ def linearspiral(radius, duration, n=1, phase=0, r0=None):
         else:
             return (radius - r0) * (t / duration)
 
-    return genericradial(r, phase=phase)
+    return genericradial(omega, r, phase=phase)
