@@ -80,7 +80,6 @@ def double_exp(a, b):
         return output
     return function
 
-
 def double_exp2(a, b, threshold):
     def function(t):
         start_shift = -np.log(threshold) / a
