@@ -455,7 +455,6 @@ class LaserSequence(LaserPulse):
                     # write non-modulated binary pulses with 100% precision
                     x, y = pulse.x, pulse.y
                     x += xshift; y += yshift  # shift incase coordinate system is offset from calibration...
-                    # print(x, y)
                     xv, yv = pvcs.voltage_from_position(x, y)
                     current = pconv.power_to_current(pulse.power)
                     f.write(cycle_code_line(xv, yv, pulse.duration, current) + "\n")
@@ -463,7 +462,7 @@ class LaserSequence(LaserPulse):
                 else:
                     # if a pulse has some sort of continuous profile, sample it with the resolution specified by time_interval
                     # and write individual cycle code lines per sample
-                    times = np.arange(0, pulse.duration, time_interval)
+                    times = np.arange(0, pulse.duration, time_interval) + pulse.start
                     for t in times:  # t is in the domain of the pulse
                         if isinstance(pulse, LaserStrobe):
                             x, y = pulse.move_beam(t + pulse.start)

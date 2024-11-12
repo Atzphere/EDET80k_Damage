@@ -9,7 +9,7 @@ def load_optris_imcsv(f):
     param f: filename of the snapshot.
     '''
 
-    raw_data = np.loadtxt(f, delimiter=",")
+    raw_data = np.genfromtxt(f, delimiter=",")[:,:-1]
 
     # I guess because Optris is european they use commas as decimals...
     # WHILE also using them to separate their CSV values?!??!?!?!

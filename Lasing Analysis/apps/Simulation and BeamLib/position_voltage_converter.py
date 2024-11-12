@@ -437,3 +437,6 @@ annealer = PositionVoltageConverter()
 
 def voltage_from_position(x, y):
     return annealer.voltage_given_position((x, y))
+
+def position_from_voltage(xv, yv, **kwargs):
+    return annealer.position_given_voltage((xv, yv), **kwargs)
