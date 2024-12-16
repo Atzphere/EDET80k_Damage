@@ -3,15 +3,21 @@ import sys
 import math
 import csv
 
+import os
+
+PIXELS_PER_MICRON = 188 / 20
+
+os.chdir(os.path.dirname(__file__))
+
 # Initialize Pygame
 pygame.init()
 
 # Load the high-resolution image
-image_path = '50x control ROI.png'  # Replace with your image path
+image_path = './new chip hillock counting/moderate damage zoomed extra in roi.png'  # Replace with your image path
 original_image = pygame.image.load(image_path)
 
 # Set the initial display size
-display_width, display_height = 800, 600
+display_width, display_height = 1200, 900
 screen = pygame.display.set_mode((display_width, display_height))
 pygame.display.set_caption("Spot Measurement with Zoom and Pan")
 
@@ -70,7 +76,7 @@ while running:
                 if len(current_points) == 2:
                     # Calculate distance between points
                     p1, p2 = current_points
-                    distance = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+                    distance = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2) / PIXELS_PER_MICRON
                     measurements.append((p1, p2, distance))
                     
                     # Clear points to allow for the next measurement

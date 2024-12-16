@@ -148,20 +148,88 @@ class DatabaseWrapper:
         if (database.write_counter + 1) % database.backup_frequency == 0:
             self.backup(note="automated backup")
 
+    def get_entry_files(self, fullpath=True):
+        '''
+        Returns a list of entry filepaths
+        '''
+        record = refresh_data(load_db(self.dbpath))
+        files = dt.get_files(record.entry_folder, fullpath=fullpath, extensions=(".dill",))
+        files_f = filter(lambda name: not "gitignore" in name, files)
+        return files_f
+
     def load_data(self):
         '''
-        Exposes the ChipRecord's data for read/write.
+        Exposes the ChipRecord for read/write.
         '''
         record = refresh_data(load_db(self.dbpath))
         return record
 
+    def sorted_ids(self):
+        '''
+        Returns a list of datewise-sorted entry IDs.
+        '''
+        record = refresh_data(load_db(self.dbpath))
+        csv_data = read_csv(record)
+        files = self.get_entry_files()
+
+        ids = csv_data["PulseID"]
+        dates = csv_data["Date"]
+
+        assert len(list(files)) == len(ids)
+
+        ids_sorted = [id for _, id in sorted(zip(dates, ids))]
+
+        return ids_sorted
+
+    def get_diff(self):
+        '''
+        Used for debugging purposes: returns any entries in the csv file that aren't in the entry database.
+        '''
+        record = refresh_data(load_db(self.dbpath))
+        csv_data = read_csv(record)
+        csv_ids = csv_data["PulseID"]
+
+        print("CSV IDs:")
+        print(csv_ids)
+        
+        entry_ids = list([t.split(".")[0] for t in self.get_entry_files(fullpath=False)])
+
+        print("Entry IDs:")
+        print(entry_ids)
+        
+        diff = [item for item in csv_ids if item not in entry_ids]
+        return list(diff)
+        
+
+    def get_file(self, ID):
+        '''
+        Gets an entry's file given its ID.
+
+        Returns a filepath string.
+        '''
+        record = refresh_data(load_db(self.dbpath))
+        return f"{record.entry_folder}/{ID}.dill"
+
+    def get_entries(self):
+        '''
+        Generator that returns a timewise (oldest-first) sequence of lasing entries.
+
+        Try to keep the generator structure whenever possible instead of pulling the entire database
+        otherwise, you will quickly encounter memory issues with large records.
+
+        Returns a generator object of (ID, DataEntry).
+        '''
+        for ID in self.sorted_ids():
+            path = self.get_file(ID)
+            yield (ID, read_entry_file(path))
+
     def load_entries(self):
         '''
-        Exposes the ChipRecord's data for read/write.
+        Loads a dictionary of entries and their pulse IDs
         '''
         record = refresh_data(load_db(self.dbpath))
 
-        files = dt.get_files(record.entry_folder, fullpath=True)
+        files = self.get_entry_files()
         entrydata = {}
 
         for f in files:
@@ -170,24 +238,15 @@ class DatabaseWrapper:
 
         return entrydata
 
-    def get_record(self):
-        '''
-        Returns a date-sorted list of tag-annealing entries
-        '''
-        data = self.load_entries()
-        dates = list([entry.date for tag, entry in list(data.items())])
-        entries = list(data.items())
-
-        sorted_entries = [entry for _, entry in sorted(zip(dates, entries))]
-
-        return sorted_entries
 
     def visualize(self, alpha=0.2):
         '''
         Plot all prior recorded annealing sequences
         '''
-        record = self.get_record()
-        color = iter(cm.rainbow(np.linspace(0, 1, len(record))))
+        record = self.get_entries()
+        gen_length = sum(1 for _ in record)
+        record = self.get_entries()
+        color = iter(cm.rainbow(np.linspace(0, 1, len(list(self.get_entry_files())))))
         
         database = self.load_data()
         refresh_data(database)
@@ -232,10 +291,10 @@ class DatabaseWrapper:
         database = self.load_data()
 
         # remove current records
-        current_files = dt.get_files(database.entry_folder, fullpath=True)
+        current_files = dt.get_files(database.entry_folder, fullpath=True, extensions=(".dill",))
 
         try:
-            for f in current_files:
+            for f in filter(lambda name: not "gitignore" in name, current_files):
                 os.remove(f)
             load_zip(f"{database.backup_folder}/{name}", dump=database.path)
         except FileNotFoundError:
@@ -257,8 +316,11 @@ class DatabaseWrapper:
 
     def get_backups(self):
         database = self.load_data()
-        return dt.get_files(database.backup_folder, fullpath=False)
+        return dt.get_files(database.backup_folder, fullpath=False, extensions=(".zip",))
 
+
+def read_csv(db):
+    return pd.read_csv(db.csvpath, sep=',', parse_dates=["Date"], dayfirst=True)    
 
 def refresh_csv(db):
     '''
@@ -266,14 +328,14 @@ def refresh_csv(db):
     This should only be run in the case of restoring backups.
     '''
 
-    data = pd.read_csv(db.csvpath, sep=',')
+    data = read_csv(db)
     ID_list = list(data["PulseID"])
     unknown_IDs = []
     entries_to_add = []
 
     new_lines = []
 
-    entry_files = dt.get_files(db.entry_folder)
+    entry_files = dt.get_files(db.entry_folder, extensions=(".dill",))
     entry_IDs = [name.split(".")[0] for name in entry_files]
 
     for ID in ID_list:
@@ -324,7 +386,7 @@ def refresh_data(db):
         ID_list = data["PulseID"]
         removed_IDs = []
 
-        entry_files = dt.get_files(db.entry_folder)
+        entry_files = dt.get_files(db.entry_folder, extensions=(".dill",))
         entry_IDs = [name.split(".")[0] for name in entry_files]
 
         for ID in entry_IDs:

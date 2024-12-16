@@ -21,5 +21,18 @@ d7c6f5199774ea87cb73212ec10d467a,2024-10-29 18:39:20.589702,1,9,30,31.0,ramping 
 684976a2649421a965da5fe2f61e1e02,2024-11-04 15:49:11.251576,472,6,43.96868826333574,28320.0,"300 x 1s (hold) @6W slow cool rapid heat, exp cool b: 0.05 to lasing threshold. preheat@32C"
 318dd3e95f0eae25d8a3aa163f7dfb9b,2024-11-05 16:04:48.887096,472,6,14.862943611198904,14160.0,"300 x 1s (hold) @6W exp heat, rapid cool b: 0.05 to lasing threshold"
 b06e25a2b5a2beae68a5498346c938a8,2024-11-06 17:22:45.981137,472,6,128.90606479000724,56640.0,"472 pulses ramp to 6W and down, double exp a: 0.025 b: 0.05. preheat@32C"
-
 219500941f621b2bb4b2e08ea7eb2eb5,2024-11-08 15:03:26.214683,1,6,10828.109442360608,10829.109442360608,"one pulse with thermal cycling, slow ramp up then modulate between 6 and 0.7W for 3h"
+f2a7a81621cb515a39326973c3049f40,2024-11-15 16:55:00.846621,300,0.5,1,600.0,"(PLACEHOLDER POWER), 300x binary 1s 20mW pulses to hunt for hillocks"
+be474f82f4d40b8f5a4b20e86af08626,2024-11-18 15:39:45.272006,300,0.5,1,600.0,"(PLACEHOLDER POWER), 1200x binary 1s 440 mW (1.15A) pulses to hunt for hillocks"
+8dbd6031cccf303672f5607d27d0ef68,2024-11-18 17:47:29.567831,300,0.5,1,600.0,"(PLACEHOLDER POWER), 1200x binary 1s 680 mW (1.2A) pulses to hunt for hillocks, barely discernable heating on IR"
+2c19b20af28cd434819eb7961ec5a873,2024-11-19 15:58:42.097199,300,0.5,1,600.0,"(PLACEHOLDER POWER), 1200x binary 1s 800 mW (1.22A) pulses to hunt for hillocks, barely discernable heating on IR"
+f86f1a18a0b9aac2d6d4d63ab0b7951f,2024-11-19 18:25:11.865301,300,0.5,1,600.0,"(PLACEHOLDER POWER), 1200x binary 1s 900 mW (1.24A) pulses to hunt for hillocks, barely discernable heating on IR"
+a0b0afbd504f706a64fa3fd053996398,2024-11-19 20:30:18.155940,1200,1,1,2400.0,1200x binary 1s 1W pulses to hunt for hillocks
+cf57129b95e15991762c958dd9bf30dc,2024-11-19 21:53:44.706148,1200,2,1,2400.0,1200x binary 1s 2W pulses to hunt for hillocks
+d777339baffb17dfbea69e8d7c1b822c,2024-11-20 16:23:23.976822,1200,2.5,1,2400.0,1200x binary 1s 2.5W pulses to hunt for hillocks
+947105c83f25cc3e87ec67e12852922c,2024-11-20 16:28:56.813323,1200,3,1,2400.0,1200x binary 1s 3W pulses to hunt for hillocks
+6866fb61f4a9a673b81114ab9aad1e60,2024-11-21 14:32:28.952771,1200,4,1,2400.0,1200x binary 1s 3.5W pulses to hunt for hillocks
+a967ce7a9c21569c7fc1d37fb49d0d59,2024-11-22 16:11:04.298832,1,4,216000,216001.0,4W hold for 60 hours 
+f3ef78756334653bc4d413d1413fb039,2024-11-26 17:55:22.327625,1200,4,1,73200.0,"4W x1200 cooling between, no damage"
+939c96c4fed8a80aaa92aff35f53ca71,2024-11-26 18:02:32.852768,50,4,0.5,50.0,"50x 4W 0.5s preheat to 32C, Tmax '28C'"
+56a20496f5cdc02a9962e609efbd57f0,2024-11-26 18:12:16.119235,150,4,0.5,150.0,"150x 4W 0.5s preheat to 32C, Tmax '28C-28.5C'"

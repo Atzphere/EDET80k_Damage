@@ -21,6 +21,10 @@ def get_parent_dir(directory, depth=1):
     return path
 
 
+def get_file_extension(path):
+    filename, ext = os.path.splitext(path)
+    return ext
+
 def get_subdirs(directory, fullpath=False):
     '''
     Gets the folder in a folder. Not recursive.
@@ -41,7 +45,7 @@ def get_subdirs(directory, fullpath=False):
                 if os.path.isdir(os.path.join(directory, dI))]
 
 
-def get_files(directory, fullpath=False):
+def get_files(directory, fullpath=False, extensions=None):
     '''
     Gets the folder in a folder. Not recursive.
     Only returns folder names by default.
@@ -51,10 +55,19 @@ def get_files(directory, fullpath=False):
 
         fullpath (bool) : Whether or not to return full file paths.
                           Default value: False
+
+        extensions List, default None: Whitelist of file extensions to return
     '''
     if fullpath:
-        return [os.path.join(directory, f) for f in os.listdir(
+        results = [os.path.join(directory, f) for f in os.listdir(
             directory) if os.path.isfile(os.path.join(directory, f))]
     else:
-        return [f for f in os.listdir(
+        results = [f for f in os.listdir(
             directory) if os.path.isfile(os.path.join(directory, f))]
+    if extensions is not None:
+        try:
+            return filter(lambda file: get_file_extension(file) in extensions, results)
+        except ValueError:
+            raise ValueError("extensions must be an iterable of strings")
+    else:
+        return results
