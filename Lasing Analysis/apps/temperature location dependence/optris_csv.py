@@ -59,7 +59,7 @@ class OptrisDataset(DictDataset):
                         working_column = 2 * num + 2
                         value_components = [
                             int(i) for i in row[working_column:working_column + 2]]
-                        value = value_components[0] + value_components[1] / 100
+                        value = value_components[0] + value_components[1] / 10
 
                         self.organize(series, value)
                 except IndexError:
