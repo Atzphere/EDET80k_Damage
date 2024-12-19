@@ -449,12 +449,16 @@ class LaserSequence(LaserPulse):
 
         '''
 
+        if xshift == 0 and yshift == 0:
+            print("WARNING: no centering offsets specified. Is this intentional?")
+        
         with open(file, "w") as f:
             for pulse, delay in zip(self.pulses, self.delays):
                 if pulse.modulators is None and isinstance(pulse, LaserPulse):
                     # write non-modulated binary pulses with 100% precision
                     x, y = pulse.x, pulse.y
                     x += xshift; y += yshift  # shift incase coordinate system is offset from calibration...
+                    # print(x, y)
                     xv, yv = pvcs.voltage_from_position(x, y)
                     current = pconv.power_to_current(pulse.power)
                     f.write(cycle_code_line(xv, yv, pulse.duration, current) + "\n")

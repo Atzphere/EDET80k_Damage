@@ -1,7 +1,19 @@
+'''
+Various time-parameterized shape-generating functions for LaserStrobes
+'''
+
 import numpy as np
 
 
 def flick(x1, y1, x2, y2, time, timestep):
+    '''
+    Rapidly switches between two laser positions
+    Used to test the feasibility of strobing: does the laser "trace" across the chip if left on during galvo movement?
+
+    time: total pulse duration
+    
+    timestep: the time to wait between location switches
+    '''
     n = int(time // timestep)
     xpos = np.zeros(n + 1)
     ypos = np.zeros(n + 1)

@@ -11,6 +11,8 @@ import zipfile
 import dirtools as dt
 import csv
 
+from typing import Generator, Iterator, Dict
+
 import numpy as np
 
 from matplotlib import cm
@@ -148,7 +150,7 @@ class DatabaseWrapper:
         if (database.write_counter + 1) % database.backup_frequency == 0:
             self.backup(note="automated backup")
 
-    def get_entry_files(self, fullpath=True):
+    def get_entry_files(self, fullpath=True) -> Iterator[str]:
         '''
         Returns a list of entry filepaths
         '''
@@ -201,7 +203,7 @@ class DatabaseWrapper:
         return list(diff)
         
 
-    def get_file(self, ID):
+    def get_file(self, ID) -> str:
         '''
         Gets an entry's file given its ID.
 
@@ -210,7 +212,7 @@ class DatabaseWrapper:
         record = refresh_data(load_db(self.dbpath))
         return f"{record.entry_folder}/{ID}.dill"
 
-    def get_entries(self):
+    def get_entries(self) -> Generator[DataEntry, None, None`]:
         '''
         Generator that returns a timewise (oldest-first) sequence of lasing entries.
 
@@ -223,7 +225,7 @@ class DatabaseWrapper:
             path = self.get_file(ID)
             yield (ID, read_entry_file(path))
 
-    def load_entries(self):
+    def load_entries(self) -> Dict:
         '''
         Loads a dictionary of entries and their pulse IDs
         '''
@@ -238,10 +240,29 @@ class DatabaseWrapper:
 
         return entrydata
 
-
-    def visualize(self, alpha=0.2):
+    def load_entry(self, ID):
         '''
-        Plot all prior recorded annealing sequences
+        Returns a loaded DataEntry corresponding to a provided id.
+        Use is not recommeded as it will easily eat up your memory with large databases.
+
+        Use get_entries or other generator-based methods instead.
+        '''
+
+        return read_entry_file(self.get_file(ID))
+
+
+    def visualize(self, alpha=0.2, fpath='annealing record visualization.png'):
+        '''
+        Plot all prior recorded annealing sequences.
+        Also capable of exporting figures to a file.
+
+        params:
+
+        alpha float, default 0.2: transparency of annealing spot markers.
+                        Helpful to visualize the intensity of successive lasing on the same location.
+
+        fpath str, default 'annealing record visualization.png':
+                                   Filepath to export the finished visualization under.
         '''
         record = self.get_entries()
         gen_length = sum(1 for _ in record)
@@ -250,7 +271,7 @@ class DatabaseWrapper:
         
         database = self.load_data()
         refresh_data(database)
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(tight_layout=True)
         ax.set_aspect("equal")
         ax.set_xlim(-3, 35)
         ax.set_ylim(-3, 35)
@@ -258,19 +279,19 @@ class DatabaseWrapper:
         ax.axvline(32, 0, 32, c="gray")
         ax.axhline(0, 0, 32, c="gray")
         ax.axhline(32, 0, 32, c="gray")
-        data = self.load_entries()
+
         for (ID, entry), c in zip(record, color):
             datestr = entry.date.strftime("%m/%d/%Y, %H:%M")
             label = f"{datestr}: {entry.notes}"
             ax.plot(entry.sequence.trace_x, entry.sequence.trace_y,
                     marker="o", alpha=alpha, lw=1, label=label, c=c)
         lgnd = ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-        fig.savefig('annealing record visualization.png', bbox_extra_artists=(lgnd,), bbox_inches="tight")
+        fig.savefig(fpath, bbox_extra_artists=(lgnd,), bbox_inches="tight")
         plt.show()
 
     def backup(self, note=""):
         '''
-        Back up the current annealing history. When called, this method
+        Back up the current annealing history (entry pickles) to a zip file. When called, this method
         will return the name of the backup created in the event it needs to be
         modified.
         '''
@@ -284,16 +305,16 @@ class DatabaseWrapper:
 
     def load_backup(self, name):
         '''
-        Attempts to load a backup of the annealing history by name.
+        Attempts to load a backup of the annealing history by filename.
         This does not save the current annealing data, so be sure to backup() that
         first if you would like to not lose it.
         '''
         database = self.load_data()
 
-        # remove current records
+        # get and remove current records
         current_files = dt.get_files(database.entry_folder, fullpath=True, extensions=(".dill",))
-
         try:
+            # ignore git-related files
             for f in filter(lambda name: not "gitignore" in name, current_files):
                 os.remove(f)
             load_zip(f"{database.backup_folder}/{name}", dump=database.path)
@@ -304,6 +325,10 @@ class DatabaseWrapper:
         refresh_csv(database)
 
     def delete_backup(self, name):
+        '''
+        Deletes a backup file by its local filename. You can also just manually delete them.=,
+        but this is provided for convenience and some documentation examples.
+        '''
         database = self.load_data()
         try:
             os.remove(f"{database.backup_folder}/{name}.zip")
@@ -315,16 +340,29 @@ class DatabaseWrapper:
         save(database)
 
     def get_backups(self):
+        '''
+        Returns a list of backups
+        '''
         database = self.load_data()
         return dt.get_files(database.backup_folder, fullpath=False, extensions=(".zip",))
 
 
+def new_chiprecord(name, path, dname, csvname, overwrite=False, **kwargs):
+    dpath = f"{path}/{dname}"
+    if overwrite or not record_exists(dpath):
+        record = ChipRecord(name, path, dname=dname, csvname=csvname, **kwargs)
+
+# The following functions are purely helper functions and are not meant to be used directly by the end user.
+
 def read_csv(db):
-    return pd.read_csv(db.csvpath, sep=',', parse_dates=["Date"], dayfirst=True)    
+    '''
+    Parses the csv portion of an annealing record.
+    ''' 
+    return pd.read_csv(db.csvpath, sep=',', parse_dates=["Date"], dayfirst=False)    
 
 def refresh_csv(db):
     '''
-    Rebuilds a database's csv file, preserving notes and culling excess pulses not found in the ChipRecord.
+    Rebuilds a database's csv file, preserving notes and culling excess pulses not found as .dill files in the ChipRecord.
     This should only be run in the case of restoring backups.
     '''
 
@@ -349,7 +387,7 @@ def refresh_csv(db):
     data.set_index("PulseID", inplace=True, drop=False)
 
     for ID in unknown_IDs:
-        print(f"Dropping Sequence {ID} from csv database (not in previous backup)")
+        print(f"Dropping Sequence {ID} from csv database (not in backup)")
         data.drop(index=ID, inplace=True)
 
     for ID in entries_to_add:
@@ -367,6 +405,9 @@ def refresh_csv(db):
 
 
 def remove_entry(db, ID):
+    '''
+    Deletes a DataEntry from a ChipRecord. Only for use when restoring backups; do not use this directly.
+    '''
     try:
         os.remove(f"{db.entry_folder}/{ID}.dill")
     except FileNotFoundError as e:
@@ -404,7 +445,7 @@ def refresh_data(db):
 
 def csv_modified(db):
     '''
-    Csv file modification check using a hash comparison
+    csv file modification check using a hash comparison
     '''
     return not (db.last_hash == get_csvhash(db))
 
@@ -482,11 +523,6 @@ def record_exists(fname):
     except FileNotFoundError:
         return False
 
-
-def new_chiprecord(name, path, dname, csvname, overwrite=False):
-    dpath = f"{path}/{dname}"
-    if overwrite or not record_exists(dpath):
-        record = ChipRecord(name, path, dname=dname, csvname=csvname)
 
 
 def zip_file(target, fname):

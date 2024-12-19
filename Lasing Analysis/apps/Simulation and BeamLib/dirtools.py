@@ -1,5 +1,5 @@
 '''
-Useful directory-manipulation functions
+Useful directory-access functions
 
 Functions:
 
