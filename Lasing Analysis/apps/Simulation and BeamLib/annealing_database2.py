@@ -212,7 +212,7 @@ class DatabaseWrapper:
         record = refresh_data(load_db(self.dbpath))
         return f"{record.entry_folder}/{ID}.dill"
 
-    def get_entries(self) -> Generator[DataEntry, None, None`]:
+    def get_entries(self) -> Generator[DataEntry, None, None]:
         '''
         Generator that returns a timewise (oldest-first) sequence of lasing entries.
 
